@@ -85,11 +85,19 @@ with tab_tg:
 
     st.divider()
 
+    if src in ("secrets", "config"):
+        toggle_help = (
+            "已設定 token，預設自動開啟。"
+            "雲端 session 重啟後會保持開啟（因為 secrets 仲喺度）。"
+        )
+    else:
+        toggle_help = "未設定 token，呢度會 disabled。"
+
     st.checkbox(
         "啟用 Telegram 推送（每條新工作即時通知）",
         key="s_tg_enabled",
         disabled=src == "none",
-        help="未設定 token 嘅話呢度會 disabled。" if src == "none" else None,
+        help=toggle_help,
     )
 
     cc1, cc2 = st.columns(2)

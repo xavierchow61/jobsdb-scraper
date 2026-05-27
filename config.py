@@ -130,6 +130,15 @@ def init_settings():
     if st.session_state.get("_settings_loaded"):
         return
     cfg = _load_config_json()
+
+    # Auto-enable Telegram push when credentials are configured (secrets or
+    # config.json) and tg_enabled hasn't been explicitly set. Without this,
+    # users have to manually toggle tg_enabled every fresh Cloud session
+    # because session_state doesn't persist.
+    have_creds = bool(_secret("telegram", "token") or cfg.get("tg_token"))
+    if have_creds and "tg_enabled" not in cfg:
+        cfg["tg_enabled"] = True
+
     # Overlay secret defaults (only for non-sensitive fields)
     for k in ("source", "keyword", "location", "max_pages", "delay",
               "full_jd", "match_threshold"):
