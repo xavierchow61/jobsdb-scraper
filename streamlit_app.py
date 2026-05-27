@@ -142,7 +142,10 @@ st.set_page_config(
     page_title="JOB RADAR",
     page_icon="🎯",
     layout="wide",
-    initial_sidebar_state="expanded",
+    # "auto" lets Streamlit collapse the sidebar on mobile / narrow viewports.
+    # Hard-coding "expanded" forces it open on phones, where it overlays
+    # the main content and looks like the sidebar is "blocking" the page.
+    initial_sidebar_state="auto",
 )
 theme.apply()
 theme.render_sidebar_nav()

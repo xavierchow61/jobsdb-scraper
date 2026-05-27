@@ -172,9 +172,25 @@ header[data-testid="stHeader"] {{ background: transparent !important; backdrop-f
   backdrop-filter: blur(8px);
   border-right: 1px solid rgba(255,255,255,0.4);
   box-shadow: 2px 0 12px rgba(59,130,246,0.18);
-  position: sticky !important; top: 0 !important; height: 100vh !important;
 }}
-[data-testid="stSidebarCollapseButton"], [data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
+/* Desktop only: stick sidebar to viewport. On mobile leave Streamlit's
+   default overlay/fixed behavior so the sidebar can slide away. */
+@media (min-width: 769px) {{
+  [data-testid="stSidebar"] {{
+    position: sticky !important; top: 0 !important; height: 100vh !important;
+  }}
+}}
+/* Re-style the collapse / re-open buttons to fit the brand (no longer hidden) */
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="stSidebarCollapsedControl"] button {{
+  color: white !important;
+  background: rgba(255,255,255,0.15) !important;
+  border-radius: 8px !important;
+}}
+[data-testid="stSidebarCollapsedControl"] button {{
+  background: {P['accent']} !important;
+  box-shadow: 0 4px 12px rgba(59,130,246,0.4);
+}}
 [data-testid="stSidebar"] * {{ color: {P['sidebar_text']} !important; }}
 [data-testid="stSidebar"] a {{
   background: rgba(255,255,255,0.10) !important;
@@ -401,6 +417,35 @@ header[data-testid="stHeader"] {{ background: transparent !important; backdrop-f
 ::-webkit-scrollbar-thumb {{
   background: linear-gradient(180deg, {P['accent']}, {P['accent_dark']});
   border-radius: 5px;
+}}
+
+/* ============ Mobile (≤ 768px) ============ */
+@media (max-width: 768px) {{
+  /* Tighter container padding so content uses more of the small viewport */
+  .main .block-container {{
+    padding-top: 1rem !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    padding-bottom: 1.5rem !important;
+  }}
+  /* Shrink the title so it doesn't wrap awkwardly */
+  .stApp h1 {{ font-size: 1.5rem !important; }}
+  /* Reduce floating orb sizes — they look bloated on phones */
+  .stApp::before {{ width: 280px !important; height: 280px !important; }}
+  .stApp::after {{ width: 240px !important; height: 240px !important; }}
+  /* KPI value slightly smaller */
+  [data-testid="stMetricValue"] {{ font-size: 1.4rem !important; }}
+  /* Glass cards: smaller corner radius + padding */
+  [data-testid="stExpander"], div[data-testid="stForm"],
+  [data-testid="stPlotlyChart"], [data-testid="stDataFrame"],
+  .stCodeBlock {{
+    border-radius: 12px !important;
+  }}
+  /* Tabs: ensure they don't overflow horizontally with long Chinese labels */
+  [data-testid="stTabs"] [role="tab"] {{
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.85rem !important;
+  }}
 }}
 </style>"""
 
