@@ -154,15 +154,16 @@ ss = st.session_state
 theme.glass_title(
     "JobsDB HK",
     emoji="🇭🇰",
-    subtitle="香港求職爬蟲 · JobsDB · CTgoodjobs · cpjobs · Telegram + CV match",
-    badge="CLOUD" if appcfg.IS_CLOUD else "LOCAL",
+    subtitle="香港求職爬蟲 · JobsDB · CTgoodjobs · cpjobs · Telegram 通知 + CV 比對",
+    badge="雲端" if appcfg.IS_CLOUD else "本機",
 )
 
 if appcfg.IS_CLOUD:
     st.markdown(
         theme.cloud_banner_html(
-            "☁ <b>Cloud mode</b> · Filesystem ephemeral — 完 scrape 記住按 <b>⬇ 下載</b>。"
-            "Semantic CV scoring 已關，keyword matching only."
+            "☁ <b>雲端模式</b> · 檔案系統重啟即清 — "
+            "完成爬取後記住按 <b>⬇ 下載</b> 儲低。"
+            "CV 語意比對已關閉，只用關鍵字配對。"
         ),
         unsafe_allow_html=True,
     )
@@ -201,19 +202,19 @@ if mp and mp.exists() and not ss.running:
         stats = None
 
 c1, c2, c3, c4 = st.columns(4)
-theme.kpi_card(c1, "Total Jobs", stats["total"] if stats else 0,
+theme.kpi_card(c1, "工作總數", stats["total"] if stats else 0,
                color=theme.PALETTE["accent"], emoji="📊")
-theme.kpi_card(c2, "Saved", stats["saved"] if stats else 0,
+theme.kpi_card(c2, "已儲存", stats["saved"] if stats else 0,
                color=theme.PALETTE["warning"], emoji="⭐")
-theme.kpi_card(c3, "Applied", stats["applied"] if stats else 0,
+theme.kpi_card(c3, "已申請", stats["applied"] if stats else 0,
                color=theme.PALETTE["success"], emoji="✅")
-theme.kpi_card(c4, "Hidden", stats["hidden"] if stats else 0,
+theme.kpi_card(c4, "已隱藏", stats["hidden"] if stats else 0,
                color=theme.PALETTE["red"], emoji="🚫")
 
 st.write("")
 
 # ---- Control bar ----
-theme.section_label("⚡ SCRAPE CONTROL")
+theme.section_label("⚡ 爬蟲控制")
 ctrl1, ctrl2, ctrl3, ctrl_status = st.columns([1, 1, 1.2, 4])
 with ctrl1:
     start_clicked = st.button("▶ 開始", type="primary", disabled=ss.running, use_container_width=True)
@@ -273,7 +274,7 @@ if stop_clicked and ss.running:
 left, right = st.columns([3, 2])
 
 with left:
-    theme.section_label("📜 LOG")
+    theme.section_label("📜 日誌")
     log_box = st.empty()
     drain_log_queue()
     done = False
@@ -283,7 +284,7 @@ with left:
     log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
 
 with right:
-    theme.section_label("🥧 BY SOURCE")
+    theme.section_label("🥧 來源分佈")
     if stats and stats.get("sources"):
         try:
             import pandas as pd
@@ -322,8 +323,8 @@ with right:
             f'<div style="text-align:center;padding:2rem 1rem;color:{theme.PALETTE["muted"]};">'
             '<div style="font-size:2.5rem;margin-bottom:8px;">📭</div>'
             '<div style="font-weight:600;color:' + theme.PALETTE["subtext"] + ';margin-bottom:4px;">'
-            'Master DB 尚未有資料</div>'
-            '<div style="font-size:0.85rem;">按 ▶ 開始 跑第一次 scrape</div>'
+            '主資料庫尚未有資料</div>'
+            '<div style="font-size:0.85rem;">按 ▶ 開始 跑第一次爬取</div>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -344,7 +345,7 @@ if ss.running:
 if not ss.running and ss.last_output_path:
     p = Path(ss.last_output_path)
     if p.exists():
-        theme.section_label("📂 RUN OUTPUT")
+        theme.section_label("📂 今次輸出")
         theme.glass_card_open()
         try:
             data = p.read_bytes()
@@ -368,12 +369,12 @@ if not ss.running and ss.last_output_path:
 
 # ---- Master xlsx download + latest scrape ----
 if not ss.running and mp and mp.exists() and stats:
-    theme.section_label("📊 MASTER DATABASE")
+    theme.section_label("📊 主資料庫")
     theme.glass_card_open()
     try:
         latest = stats.get("latest_scrape", "")
         if latest:
-            st.caption(f"Latest scrape · {latest}")
+            st.caption(f"最近爬取 · {latest}")
         data = mp.read_bytes()
         sz_kb = len(data) / 1024
         st.markdown(

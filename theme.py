@@ -25,25 +25,25 @@ import streamlit as st
 # glassmorphism dashboard treatment.
 
 PALETTE = {
-    # Background gradient layers (top → middle → bottom)
-    "bg_a":           "#EFF6FF",     # blue-50
-    "bg_b":           "#93C5FD",     # blue-300
-    "bg_c":           "#1E40AF",     # blue-800
+    # Background gradient layers (light pastel — no deep navy at bottom)
+    "bg_a":           "#FAFCFF",     # near-white with hint of blue
+    "bg_b":           "#EFF6FF",     # blue-50
+    "bg_c":           "#DBEAFE",     # blue-100
     # Text (on light/white cards)
     "text":           "#0F172A",     # slate-900
     "subtext":        "#334155",     # slate-700
     "muted":          "#64748B",     # slate-500
     # Brand
-    "accent":         "#2563EB",     # blue-600
-    "accent_dark":    "#1D4ED8",     # blue-700
+    "accent":         "#3B82F6",     # blue-500 (was 600, slightly lighter)
+    "accent_dark":    "#2563EB",     # blue-600
     "accent_subtle":  "#EFF6FF",
     # Semantic
-    "success":        "#16A34A",     # green-600
-    "success_subtle": "#DCFCE7",
-    "warning":        "#F59E0B",     # amber-500 (warm gold accent)
+    "success":        "#10B981",     # emerald-500
+    "success_subtle": "#D1FAE5",
+    "warning":        "#F59E0B",     # amber-500
     "warning_subtle": "#FEF3C7",
-    "red":            "#DC2626",     # red-600
-    "red_subtle":     "#FEE2E2",
+    "red":            "#F43F5E",     # rose-500 (softer than red-600)
+    "red_subtle":     "#FFE4E6",
     "info":           "#0EA5E9",     # sky-500
     "info_subtle":    "#E0F2FE",
     # Surfaces
@@ -51,13 +51,13 @@ PALETTE = {
     "glass_strong":   "rgba(255,255,255,0.95)",
     "glass_border":   "rgba(255,255,255,1)",
     "border":         "#E2E8F0",
-    # Sidebar
-    "sidebar_a":      "#1D4ED8",
-    "sidebar_b":      "#0F172A",
+    # Sidebar (medium blue gradient — bright but readable with white text)
+    "sidebar_a":      "#60A5FA",     # blue-400
+    "sidebar_b":      "#3B82F6",     # blue-500
     "sidebar_text":   "#FFFFFF",
-    # Code (kept for log block)
-    "code_bg":        "#0F172A",
-    "code_text":      "#F59E0B",
+    # Code (kept dark for log readability)
+    "code_bg":        "#1E293B",     # slate-800 (was slate-900)
+    "code_text":      "#FCD34D",     # amber-300 (softer than 500)
 }
 
 FONTS = {
@@ -132,14 +132,14 @@ def _build_css():
 .stApp::before {{
   content: ""; position: fixed; top: -10%; right: -10%;
   width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(245,158,11,0.22) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(245,158,11,0.14) 0%, transparent 70%);
   border-radius: 50%; z-index: 0; pointer-events: none;
   animation: floatA 18s ease-in-out infinite;
 }}
 .stApp::after {{
   content: ""; position: fixed; bottom: -10%; left: -10%;
   width: 500px; height: 500px;
-  background: radial-gradient(circle, rgba(220,38,38,0.14) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(244,63,94,0.10) 0%, transparent 70%);
   border-radius: 50%; z-index: 0; pointer-events: none;
   animation: floatB 22s ease-in-out infinite;
 }}
@@ -170,8 +170,8 @@ header[data-testid="stHeader"] {{ background: transparent !important; backdrop-f
 [data-testid="stSidebar"] {{
   background: linear-gradient(180deg, {P['sidebar_a']} 0%, {P['sidebar_b']} 100%) !important;
   backdrop-filter: blur(8px);
-  border-right: 2px solid rgba(255,255,255,0.18);
-  box-shadow: 4px 0 20px rgba(15,23,42,0.25);
+  border-right: 1px solid rgba(255,255,255,0.4);
+  box-shadow: 2px 0 12px rgba(59,130,246,0.18);
   position: sticky !important; top: 0 !important; height: 100vh !important;
 }}
 [data-testid="stSidebarCollapseButton"], [data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
@@ -562,9 +562,9 @@ def render_sidebar_nav():
             'letter-spacing:0.04em;'
             'text-shadow:0 2px 6px rgba(0,0,0,0.25);">'
             '🇭🇰 JobsDB HK</div>'
-            '<div style="text-align:center;color:#F59E0B;'
-            'font-size:0.66rem;font-weight:700;letter-spacing:0.2em;'
-            'margin-bottom:0.6rem;">JOB SCRAPER</div>',
+            '<div style="text-align:center;color:#FCD34D;'
+            'font-size:0.7rem;font-weight:600;letter-spacing:0.12em;'
+            'margin-bottom:0.6rem;">香港求職爬蟲</div>',
             unsafe_allow_html=True,
         )
         st.page_link("streamlit_app.py", label="儀表板", icon="🏠")

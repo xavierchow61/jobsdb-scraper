@@ -26,10 +26,10 @@ appcfg.init_settings()
 # Header
 # ============================================================
 theme.glass_title(
-    "Settings",
+    "設定",
     emoji="⚙",
-    subtitle="Telegram · CV · Master · advanced scrape options",
-    badge="CLOUD" if appcfg.IS_CLOUD else "LOCAL",
+    subtitle="Telegram 通知 · CV 比對 · 主資料庫 · 進階爬蟲選項",
+    badge="雲端" if appcfg.IS_CLOUD else "本機",
 )
 
 
