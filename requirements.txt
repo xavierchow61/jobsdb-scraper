@@ -2,8 +2,6 @@ curl_cffi>=0.7.0
 openpyxl>=3.1.0
 pdfminer.six>=20231228
 streamlit>=1.32.0
-pandas>=2.0.0
-plotly>=5.18.0
 
 # Optional — semantic CV scoring via sentence-transformers.
 # Adds ~800MB (PyTorch + model). May exceed Streamlit Cloud's 1GB RAM limit.

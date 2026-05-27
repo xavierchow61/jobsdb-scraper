@@ -270,65 +270,15 @@ if stop_clicked and ss.running:
     ss.stop_event.set()
     ss.log_lines.append(">>> 停止訊號已發送，等緊收尾…")
 
-# ---- Two-column: Log (left) + Source pie (right) ----
-left, right = st.columns([3, 2])
-
-with left:
-    theme.section_label("📜 日誌")
-    log_box = st.empty()
-    drain_log_queue()
-    done = False
-    if ss.log_lines and ss.log_lines[-1] == "__DONE__":
-        ss.log_lines.pop()
-        done = True
-    log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
-
-with right:
-    theme.section_label("🥧 來源分佈")
-    if stats and stats.get("sources"):
-        try:
-            import pandas as pd
-            import plotly.express as px
-
-            sources_data = [
-                {"來源": k, "數量": v} for k, v in stats["sources"].items() if v > 0
-            ]
-            df = pd.DataFrame(sources_data)
-            if not df.empty:
-                palette = [
-                    theme.PALETTE["accent"],
-                    theme.PALETTE["warning"],
-                    theme.PALETTE["red"],
-                    theme.PALETTE["info"],
-                ]
-                fig = px.pie(
-                    df, values="數量", names="來源", hole=0.55,
-                    color_discrete_sequence=palette,
-                )
-                fig.update_traces(
-                    textposition="outside",
-                    textinfo="label+percent",
-                    marker=dict(line=dict(color="rgba(255,255,255,0.4)", width=2)),
-                    hovertemplate="<b>%{label}</b><br>%{value} jobs<br>%{percent}<extra></extra>",
-                )
-                theme.plotly_glass_layout(fig, height=320)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("尚無 source breakdown 資料")
-        except ImportError:
-            st.info("Plotly / pandas 未安裝，無法顯示圖表")
-    else:
-        theme.glass_card_open()
-        st.markdown(
-            f'<div style="text-align:center;padding:2rem 1rem;color:{theme.PALETTE["muted"]};">'
-            '<div style="font-size:2.5rem;margin-bottom:8px;">📭</div>'
-            '<div style="font-weight:600;color:' + theme.PALETTE["subtext"] + ';margin-bottom:4px;">'
-            '主資料庫尚未有資料</div>'
-            '<div style="font-size:0.85rem;">按 ▶ 開始 跑第一次爬取</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        theme.glass_card_close()
+# ---- Log (full width) ----
+theme.section_label("📜 日誌")
+log_box = st.empty()
+drain_log_queue()
+done = False
+if ss.log_lines and ss.log_lines[-1] == "__DONE__":
+    ss.log_lines.pop()
+    done = True
+log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
 
 # ---- Poll while running ----
 if ss.running:
@@ -367,28 +317,3 @@ if not ss.running and ss.last_output_path:
             st.warning(f"讀取輸出檔失敗: {e}")
         theme.glass_card_close()
 
-# ---- Master xlsx download + latest scrape ----
-if not ss.running and mp and mp.exists() and stats:
-    theme.section_label("📊 主資料庫")
-    theme.glass_card_open()
-    try:
-        latest = stats.get("latest_scrape", "")
-        if latest:
-            st.caption(f"最近爬取 · {latest}")
-        data = mp.read_bytes()
-        sz_kb = len(data) / 1024
-        st.markdown(
-            f'<div style="font-family:{theme.FONTS["mono"]};font-size:0.85rem;'
-            f'color:{theme.PALETTE["subtext"]};margin-bottom:8px;">'
-            f'📄 <b>{mp.name}</b>'
-            f'<span style="color:{theme.PALETTE["muted"]};margin-left:8px;">{sz_kb:.1f} KB</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        st.download_button(
-            f"⬇ 下載 {mp.name}", data, file_name=mp.name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    except Exception as e:
-        st.warning(f"讀取 master 失敗: {e}")
-    theme.glass_card_close()

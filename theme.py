@@ -569,5 +569,4 @@ def render_sidebar_nav():
         )
         st.page_link("streamlit_app.py", label="儀表板", icon="🏠")
         st.page_link("pages/0_⚙_Settings.py", label="設定", icon="⚙")
-        st.page_link("pages/1_🎨_Style_Guide.py", label="Style Guide", icon="🎨")
         st.divider()
