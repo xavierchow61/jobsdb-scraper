@@ -55,9 +55,9 @@ PALETTE = {
     "sidebar_a":      "#60A5FA",     # blue-400
     "sidebar_b":      "#3B82F6",     # blue-500
     "sidebar_text":   "#FFFFFF",
-    # Code (kept dark for log readability)
-    "code_bg":        "#1E293B",     # slate-800 (was slate-900)
-    "code_text":      "#FCD34D",     # amber-300 (softer than 500)
+    # Code / log block — soft slate paper (was dark + amber — too clashy)
+    "code_bg":        "#F1F5F9",     # slate-100 (light glass paper)
+    "code_text":      "#1E293B",     # slate-800 (dark mono on light)
 }
 
 FONTS = {
@@ -317,12 +317,12 @@ header[data-testid="stHeader"] {{ background: transparent !important; backdrop-f
   color: {P['muted']} !important;
 }}
 
-/* ============ Code block (log) ============ */
+/* ============ Code block (log) — light glass paper, no color clash ============ */
 .stCodeBlock, pre, [data-testid="stCodeBlock"] {{
-  background: rgba(15,23,42,0.96) !important;
-  border: 1px solid rgba(37,99,235,0.3) !important;
+  background: rgba(241,245,249,0.95) !important;
+  border: 2px solid rgba(255,255,255,1) !important;
   border-radius: 14px !important;
-  box-shadow: 0 8px 24px rgba(15,23,42,0.3);
+  box-shadow: 0 8px 24px rgba(37,99,235,0.12);
 }}
 .stCodeBlock code, pre code, [data-testid="stCodeBlock"] code {{
   color: {P['code_text']} !important;
@@ -415,14 +415,14 @@ def apply():
 # ============================================================
 
 def glass_title(title, emoji="", subtitle="", badge=""):
-    """Gradient header with optional emoji + subtitle + badge."""
+    """Header with solid color (no gradient — softer, less clashy)."""
     sub_html = (
         f'<p style="color:{PALETTE["muted"]};font-size:0.95rem;'
         f'margin-top:0.3rem;margin-bottom:0;font-weight:500;">{subtitle}</p>'
     ) if subtitle else ""
     badge_html = (
         f'<span style="font-family:{FONTS["mono"]};font-size:0.65rem;'
-        f'font-weight:600;letter-spacing:0.08em;text-transform:uppercase;'
+        f'font-weight:600;letter-spacing:0.08em;'
         f'background:{PALETTE["accent_subtle"]};color:{PALETTE["accent_dark"]};'
         f'padding:3px 8px;border-radius:6px;margin-left:10px;'
         f'vertical-align:middle;">{badge}</span>'
@@ -430,10 +430,8 @@ def glass_title(title, emoji="", subtitle="", badge=""):
     html = (
         f'<div style="margin-bottom:1rem;position:relative;z-index:1;">'
         f'<h1 style="'
-        f'background:linear-gradient(135deg,{PALETTE["sidebar_b"]} 0%,'
-        f'{PALETTE["accent"]} 60%,{PALETTE["red"]} 100%);'
-        '-webkit-background-clip:text;-webkit-text-fill-color:transparent;'
-        'background-clip:text;font-size:2.1rem;font-weight:800;'
+        f'color:{PALETTE["accent_dark"]};'
+        'font-size:2.1rem;font-weight:800;'
         'letter-spacing:-0.02em;margin:0;line-height:1.1;display:inline-block;'
         f'">{emoji} {title}</h1>{badge_html}{sub_html}</div>'
     )
@@ -558,13 +556,13 @@ def render_sidebar_nav():
     with st.sidebar:
         st.markdown(
             '<div style="text-align:center;padding:0.4rem 0 0.1rem;'
-            'color:white;font-size:1.2rem;font-weight:800;'
+            'color:white;font-size:1.25rem;font-weight:800;'
             'letter-spacing:0.04em;'
-            'text-shadow:0 2px 6px rgba(0,0,0,0.25);">'
-            '🇭🇰 JobsDB HK</div>'
-            '<div style="text-align:center;color:#FCD34D;'
-            'font-size:0.7rem;font-weight:600;letter-spacing:0.12em;'
-            'margin-bottom:0.6rem;">香港求職爬蟲</div>',
+            'text-shadow:0 2px 6px rgba(0,0,0,0.2);">'
+            '🎯 求職雷達</div>'
+            '<div style="text-align:center;color:rgba(255,255,255,0.85);'
+            'font-size:0.7rem;font-weight:500;letter-spacing:0.12em;'
+            'margin-bottom:0.6rem;">JOB RADAR</div>',
             unsafe_allow_html=True,
         )
         st.page_link("streamlit_app.py", label="儀表板", icon="🏠")

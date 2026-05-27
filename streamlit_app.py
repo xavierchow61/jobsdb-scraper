@@ -139,8 +139,8 @@ def build_args():
 # ============================================================
 
 st.set_page_config(
-    page_title="JobsDB HK",
-    page_icon="🇭🇰",
+    page_title="求職雷達",
+    page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -152,9 +152,9 @@ ss = st.session_state
 
 # ---- Header ----
 theme.glass_title(
-    "JobsDB HK",
-    emoji="🇭🇰",
-    subtitle="香港求職爬蟲 · JobsDB · CTgoodjobs · cpjobs · Telegram 通知 + CV 比對",
+    "求職雷達",
+    emoji="🎯",
+    subtitle="一鍵抓取 JobsDB · CTgoodjobs · cpjobs，配 Telegram 通知 + CV 比對",
     badge="雲端" if appcfg.IS_CLOUD else "本機",
 )
 
