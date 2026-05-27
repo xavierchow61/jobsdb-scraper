@@ -1,16 +1,14 @@
-"""JobsDB HK Scraper - Streamlit web UI.
+"""JobsDB HK Scraper — Streamlit main page (scrape control + log + outputs).
 
-Mirrors gui.py functionality but in a browser. Imports scraper.py untouched.
+Settings (Telegram / CV / Master path / advanced) live on the Settings page.
+This file keeps the sidebar minimal: source / keyword / location / max_pages.
 
 Run with:
     streamlit run streamlit_app.py
 """
 
-import json
-import os
 import queue
 import sys
-import tempfile
 import threading
 import time
 from datetime import datetime
@@ -18,38 +16,21 @@ from pathlib import Path
 
 import streamlit as st
 
+import config as appcfg
 import scraper
 import theme
 
-CONFIG_PATH = Path(__file__).parent / "config.json"
 
-# Streamlit Cloud puts the repo at /mount/src and the FS is ephemeral.
-# Detect that and route the master xlsx to /tmp so writes succeed,
-# but warn the user the file won't survive a restart.
-IS_CLOUD = (
-    "/mount/src" in str(Path(__file__).resolve())
-    or os.getenv("STREAMLIT_RUNTIME_ENV") == "cloud"
-)
-DEFAULT_MASTER = (
-    Path("/tmp/jobs_master.xlsx") if IS_CLOUD
-    else Path(__file__).parent / "jobs_master.xlsx"
-)
-
-
-def _secret(section, key, default=""):
-    """Read st.secrets[section][key] without raising if missing."""
-    try:
-        return st.secrets[section][key]
-    except (KeyError, FileNotFoundError, AttributeError):
-        return default
-
+# ============================================================
+# Worker pipe & thread
+# ============================================================
 
 class Args:
-    """Mirror of gui.py's Args — a plain bag of attributes for scraper.scrape()."""
+    """Plain attribute bag passed into scraper.scrape() (mirrors gui.py)."""
 
 
 class StreamPipe:
-    """File-like that pushes each line into a queue.Queue (same idea as gui.py:GuiPipe)."""
+    """File-like that pushes each line into a queue.Queue."""
 
     def __init__(self, q):
         self.q = q
@@ -77,46 +58,7 @@ class StreamPipe:
         pass
 
 
-def load_config():
-    """Merge precedence: st.secrets > config.json > built-in defaults.
-
-    On Streamlit Cloud config.json is absent (gitignored); secrets fill it in.
-    Locally, config.json wins unless secrets.toml exists.
-    """
-    cfg = {}
-    if CONFIG_PATH.exists():
-        try:
-            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            cfg = {}
-    # Overlay Telegram secrets if present
-    tg_token = _secret("telegram", "token")
-    tg_chat = _secret("telegram", "chat_id")
-    if tg_token:
-        cfg["tg_token"] = tg_token
-        cfg.setdefault("tg_enabled", True)
-    if tg_chat:
-        cfg["tg_chat"] = tg_chat
-    # Overlay form defaults from secrets
-    for k in ("source", "keyword", "location", "max_pages", "delay", "full_jd", "match_threshold"):
-        v = _secret("defaults", k, None)
-        if v is not None and k not in cfg:
-            cfg[k] = v
-    return cfg
-
-
-def is_cloud_mode():
-    return IS_CLOUD
-
-
-def save_config(cfg):
-    try:
-        CONFIG_PATH.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
-    except Exception as e:
-        st.warning(f"無法寫入 config.json: {e}")
-
-
-def init_state():
+def init_runtime_state():
     ss = st.session_state
     ss.setdefault("worker", None)
     ss.setdefault("stop_event", threading.Event())
@@ -125,10 +67,12 @@ def init_state():
     ss.setdefault("running", False)
     ss.setdefault("last_output_path", None)
     ss.setdefault("finished_msg", None)
+    ss.setdefault("worker_result", {})
+    ss.setdefault("uploaded_cv_path", None)
+    ss.setdefault("uploaded_cv_name", None)
 
 
 def drain_log_queue():
-    """Pull whatever the worker thread has written into log_lines."""
     ss = st.session_state
     while True:
         try:
@@ -142,11 +86,7 @@ def drain_log_queue():
 
 
 def run_scrape(args, q, stop_event, result):
-    """Worker thread body — redirects stdout into the queue, calls scraper.scrape().
-
-    `result` is a dict shared with the main thread for return values
-    (avoids touching st.session_state from a background thread).
-    """
+    """Worker thread body — redirects stdout into queue, calls scraper.scrape()."""
     old_stdout = sys.stdout
     sys.stdout = StreamPipe(q)
     try:
@@ -165,59 +105,56 @@ def run_scrape(args, q, stop_event, result):
         q.put(("__DONE__", False))
 
 
-def build_args(form, uploaded_cv):
-    """Translate the Streamlit form dict into a scraper-compatible Args object."""
+def build_args():
+    """Build a scraper-compatible Args object from session_state settings."""
+    s = st.session_state
     a = Args()
-    a.source = form["source"]
-    a.keyword = form["keyword"].strip() or "Accountant"
-    a.location = form["location"].strip()
-    a.max_pages = max(0, int(form["max_pages"]))
-    a.full_jd = bool(form["full_jd"])
-    a.delay = max(0.0, float(form["delay"]))
-    a.output = form["output"].strip() or None
+    a.source = s.s_source
+    a.keyword = (s.s_keyword or "").strip() or "Accountant"
+    a.location = (s.s_location or "").strip()
+    a.max_pages = max(0, int(s.s_max_pages or 0))
+    a.full_jd = bool(s.s_full_jd)
+    a.delay = max(0.0, float(s.s_delay or 1.5))
+    a.output = (s.s_output or "").strip() or None
     a.csv = True
-    a.master = form["master"].strip() if form["master_enabled"] else ""
+    a.master = (s.s_master or "").strip() if s.s_master_enabled else ""
 
-    a.telegram_enabled = bool(form["tg_enabled"])
-    a.telegram_token = form["tg_token"].strip()
-    a.telegram_chat_id = form["tg_chat"].strip()
-    a.telegram_max = int(form["tg_max"] or 0)
+    # Telegram — Cloud always pulls from secrets, never UI
+    tok, chat, _src = appcfg.telegram_credentials()
+    a.telegram_enabled = bool(s.s_tg_enabled and tok and chat)
+    a.telegram_token = tok
+    a.telegram_chat_id = chat
+    a.telegram_max = int(s.s_tg_max or 0)
     a.telegram_delay = 1.5
-    a.include_actions = bool(form["include_actions"])
-    a.match_threshold = float(form["match_threshold"] or 0)
+    a.include_actions = bool(s.s_include_actions)
+    a.match_threshold = float(s.s_match_threshold or 0)
 
-    # CV: prefer freshly uploaded file, fallback to path in config
-    if uploaded_cv is not None:
-        suffix = Path(uploaded_cv.name).suffix or ".pdf"
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        tmp.write(uploaded_cv.getvalue())
-        tmp.close()
-        a.cv = tmp.name
-    else:
-        a.cv = form["cv_path"].strip()
+    # CV: uploaded file (saved by Settings page) wins over path
+    a.cv = s.uploaded_cv_path or (s.s_cv_path or "").strip()
 
-    at_text = form["at"].strip()
+    at_text = (s.s_at or "").strip()
     a.at = scraper.parse_at(at_text) if at_text else None
     return a
 
 
-# ------------------------------------------------------------
+# ============================================================
 # UI
-# ------------------------------------------------------------
+# ============================================================
 
 st.set_page_config(page_title="JobsDB HK 爬蟲", page_icon="🇭🇰", layout="wide")
 theme.apply()
-init_state()
-cfg = load_config()
+appcfg.init_settings()
+init_runtime_state()
 
-badge = '<span class="badge">CLOUD</span>' if IS_CLOUD else ""
+# ---- Header ----
+badge = '<span class="badge">CLOUD</span>' if appcfg.IS_CLOUD else ""
 st.markdown(
     f'<div class="app-title">🇭🇰 JobsDB HK 爬蟲 {badge}</div>'
     '<div class="app-subtitle">JobsDB · CTgoodjobs · cpjobs &nbsp;·&nbsp; Telegram + CV match</div>',
     unsafe_allow_html=True,
 )
 
-if IS_CLOUD:
+if appcfg.IS_CLOUD:
     st.markdown(
         '<div class="cloud-banner">'
         '☁ <b>Cloud mode</b> · Filesystem ephemeral — 完 scrape 記住按 <b>⬇ 下載</b>。'
@@ -226,85 +163,52 @@ if IS_CLOUD:
         unsafe_allow_html=True,
     )
 
-# ---- Sidebar form ----
+# ---- Sidebar: ONLY core scrape params ----
 with st.sidebar:
-    st.header("爬蟲設定")
-
-    source = st.selectbox(
-        "資料來源 Source",
-        options=list(scraper.SOURCES),
-        index=list(scraper.SOURCES).index(cfg.get("source", "jobsdb")) if cfg.get("source") in scraper.SOURCES else 0,
+    st.markdown(
+        '<div style="font-family:var(--font-mono); font-size:0.65rem; '
+        'font-weight:600; letter-spacing:0.6px; text-transform:uppercase; '
+        'color:var(--color-text-muted); margin-bottom:6px;">SCRAPE</div>',
+        unsafe_allow_html=True,
     )
 
-    keyword = st.text_input("關鍵字 Keyword", value=cfg.get("keyword", "Accountant"))
+    st.selectbox(
+        "資料來源 Source",
+        options=list(scraper.SOURCES),
+        key="s_source",
+    )
 
-    # Location picker depends on source
-    if source == "ctgoodjobs":
-        loc_options = [""] + scraper.CT_LOCATIONS
-        loc_default = cfg.get("location", "")
-        loc_idx = loc_options.index(loc_default) if loc_default in loc_options else 0
-        location = st.selectbox("地區 Location (CTgoodjobs)", loc_options, index=loc_idx)
-    elif source == "cpjobs":
-        loc_options = [""] + scraper.CP_LOCATIONS
-        loc_default = cfg.get("location", "")
-        loc_idx = loc_options.index(loc_default) if loc_default in loc_options else 0
-        location = st.selectbox("地區 Location (cpjobs — 只支援 4 大區)", loc_options, index=loc_idx)
+    st.text_input("關鍵字 Keyword", key="s_keyword")
+
+    # Location field is source-dependent
+    if st.session_state.s_source == "ctgoodjobs":
+        loc_options = [""] + list(scraper.CT_LOCATIONS)
+        if st.session_state.s_location not in loc_options:
+            st.session_state.s_location = ""
+        st.selectbox("地區 Location (CTgoodjobs)", loc_options, key="s_location")
+    elif st.session_state.s_source == "cpjobs":
+        loc_options = [""] + list(scraper.CP_LOCATIONS)
+        if st.session_state.s_location not in loc_options:
+            st.session_state.s_location = ""
+        st.selectbox("地區 Location (cpjobs · 4 大區)", loc_options, key="s_location")
     else:
-        location = st.text_input("地區 Location (JobsDB — 留空 = 全港)", value=cfg.get("location", ""))
+        st.text_input("地區 Location (留空 = 全港)", key="s_location")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        max_pages = st.number_input("最多頁數 (0 = 全部)", min_value=0, max_value=999, value=int(cfg.get("max_pages", 0) or 0), step=1)
-    with col2:
-        delay = st.number_input("Request 間隔 (秒)", min_value=0.5, max_value=10.0, value=float(cfg.get("delay", 1.5) or 1.5), step=0.5)
+    st.number_input(
+        "最多頁數 (0 = 全部)",
+        min_value=0, max_value=999, step=1,
+        key="s_max_pages",
+    )
 
-    full_jd = st.checkbox("抓取完整 JD（Responsibilities / Requirements 自動分段）", value=bool(cfg.get("full_jd", True)))
-
-    at = st.text_input("定時開始（HH:MM 或 YYYY-MM-DD HH:MM，留空 = 即刻）", value="")
-
-    with st.expander("📂 輸出 / Master"):
-        output = st.text_input("Per-run CSV 路徑（留空 = 自動命名）", value="")
-        master_enabled = st.checkbox("寫入 Master xlsx", value=bool(cfg.get("master_enabled", True)))
-        master = st.text_input("Master xlsx 路徑", value=cfg.get("master", str(DEFAULT_MASTER)))
-
-    with st.expander("🎯 CV Match Scoring"):
-        uploaded_cv = st.file_uploader("上傳 CV（PDF / TXT）", type=["pdf", "txt"])
-        cv_path = st.text_input("或者用本地 CV 路徑", value=cfg.get("cv", ""))
-        match_threshold = st.number_input(
-            "Telegram 推送 Match Score 下限 (0–100)",
-            min_value=0.0, max_value=100.0,
-            value=float(cfg.get("match_threshold", 0) or 0), step=5.0,
-        )
-
-    with st.expander("📨 Telegram 通知"):
-        tg_enabled = st.checkbox("啟用 Telegram 即時通知", value=bool(cfg.get("tg_enabled", False)))
-        tg_token = st.text_input("Bot Token", value=cfg.get("tg_token", ""), type="password")
-        tg_chat = st.text_input("Chat ID", value=cfg.get("tg_chat", ""))
-        tg_max = st.number_input("最多推送幾多條（0 = 無上限）", min_value=0, max_value=9999, value=int(cfg.get("tg_max", 0) or 0), step=1)
-        include_actions = st.checkbox("加 Save / Hide / Apply 按鈕（需 bot_listener.py 運行）", value=False)
-        if st.button("🔔 Test Telegram"):
-            ok, msg = scraper.telegram_test_ping(tg_token.strip(), tg_chat.strip())
-            (st.success if ok else st.error)(msg)
-
-    if st.button("💾 儲存設定到 config.json"):
-        save_config({
-            "source": source, "keyword": keyword, "location": location,
-            "max_pages": str(max_pages), "full_jd": full_jd, "delay": str(delay),
-            "master": master, "master_enabled": master_enabled,
-            "tg_token": tg_token, "tg_chat": tg_chat, "tg_enabled": tg_enabled,
-            "tg_max": str(tg_max), "cv": cv_path,
-            "match_threshold": str(match_threshold),
-        })
-        st.success("已儲存到 config.json")
-
-form = dict(
-    source=source, keyword=keyword, location=location,
-    max_pages=max_pages, delay=delay, full_jd=full_jd, at=at,
-    output=output, master=master, master_enabled=master_enabled,
-    cv_path=cv_path, match_threshold=match_threshold,
-    tg_enabled=tg_enabled, tg_token=tg_token, tg_chat=tg_chat,
-    tg_max=tg_max, include_actions=include_actions,
-)
+    st.markdown(
+        f'<div style="margin-top:18px; padding:10px 12px; background:var(--color-surface-alt); '
+        f'border:1px solid var(--color-border); border-radius:var(--radius-md); '
+        f'font-size:0.75rem; color:var(--color-text-secondary);">'
+        f'⚙ 進階設定（Telegram / CV / Master 等）<br>'
+        f'<span style="color:var(--color-text-muted);">→ Sidebar 入面點 <b>Settings</b> page</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 # ---- Control bar ----
 ss = st.session_state
@@ -335,7 +239,7 @@ if clear_clicked:
 
 if start_clicked and not ss.running:
     try:
-        args = build_args(form, uploaded_cv)
+        args = build_args()
     except Exception as e:
         st.error(f"參數錯誤: {e}")
         st.stop()
@@ -414,7 +318,8 @@ if not ss.running and ss.last_output_path:
 
 # ---- Master xlsx download + stats ----
 if not ss.running:
-    mp = Path(master) if master else None
+    master_path = (ss.s_master or "").strip()
+    mp = Path(master_path) if master_path else None
     if mp and mp.exists():
         st.markdown(
             '<div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:600; '

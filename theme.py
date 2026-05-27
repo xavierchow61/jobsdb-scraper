@@ -131,8 +131,9 @@ html, body, .stApp, [class*="css"] {{
   color: var(--color-text);
 }}
 .stApp {{ background: var(--color-bg); }}
+/* Top padding must clear Streamlit's fixed toolbar (~3rem) — don't shrink past 3rem */
 .block-container {{
-  padding-top: 1.25rem !important;
+  padding-top: 3rem !important;
   padding-bottom: 2rem !important;
   max-width: 1280px;
 }}
