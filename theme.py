@@ -432,7 +432,7 @@ def glass_title(title, emoji="", subtitle="", badge=""):
         f'<h1 style="'
         f'color:{PALETTE["accent_dark"]};'
         'font-size:2.1rem;font-weight:800;'
-        'letter-spacing:-0.02em;margin:0;line-height:1.1;display:inline-block;'
+        'letter-spacing:0.04em;margin:0;line-height:1.1;display:inline-block;'
         f'">{emoji} {title}</h1>{badge_html}{sub_html}</div>'
     )
     st.markdown(html, unsafe_allow_html=True)
@@ -555,14 +555,11 @@ def render_sidebar_nav():
     """Branded sidebar with manual page_links — replaces default file-based nav."""
     with st.sidebar:
         st.markdown(
-            '<div style="text-align:center;padding:0.4rem 0 0.1rem;'
-            'color:white;font-size:1.25rem;font-weight:800;'
-            'letter-spacing:0.04em;'
+            '<div style="text-align:center;padding:0.6rem 0 0.8rem;'
+            'color:white;font-size:1.3rem;font-weight:800;'
+            'letter-spacing:0.18em;'
             'text-shadow:0 2px 6px rgba(0,0,0,0.2);">'
-            '🎯 求職雷達</div>'
-            '<div style="text-align:center;color:rgba(255,255,255,0.85);'
-            'font-size:0.7rem;font-weight:500;letter-spacing:0.12em;'
-            'margin-bottom:0.6rem;">JOB RADAR</div>',
+            '🎯 JOB RADAR</div>',
             unsafe_allow_html=True,
         )
         st.page_link("streamlit_app.py", label="儀表板", icon="🏠")

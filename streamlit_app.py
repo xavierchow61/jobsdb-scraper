@@ -139,7 +139,7 @@ def build_args():
 # ============================================================
 
 st.set_page_config(
-    page_title="求職雷達",
+    page_title="JOB RADAR",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -152,7 +152,7 @@ ss = st.session_state
 
 # ---- Header ----
 theme.glass_title(
-    "求職雷達",
+    "JOB RADAR",
     emoji="🎯",
     subtitle="一鍵抓取 JobsDB · CTgoodjobs · cpjobs，配 Telegram 通知 + CV 比對",
     badge="雲端" if appcfg.IS_CLOUD else "本機",
