@@ -1,0 +1,44 @@
+# ===== Secrets — NEVER commit these =====
+config.json
+.streamlit/secrets.toml
+*.env
+.env
+
+# ===== Local data =====
+jobs_master*.xlsx
+*_backup_*.xlsx
+*_old_*.xlsx
+bot_state.json
+industry_keywords_reference.xlsx
+
+# CV / PDF (personal)
+*.pdf
+*.profile.json
+
+# Per-run CSV outputs
+*_jobs_*.csv
+jobsdb_*.csv
+ctgoodjobs_*.csv
+cpjobs_*.csv
+
+# Build artifacts
+build/
+dist/
+*.spec.bak
+*.zip
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Local Python virtual envs
+.venv/
+venv/
+env/
