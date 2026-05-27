@@ -9,6 +9,7 @@ import theme
 
 st.set_page_config(page_title="Style Guide", page_icon="🎨", layout="wide")
 theme.apply()
+theme.render_sidebar_nav()
 
 t = theme.tokens()
 C, F, SP, R, SH = t["colors"], t["fonts"], t["space"], t["radius"], t["shadow"]

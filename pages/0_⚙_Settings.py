@@ -18,27 +18,23 @@ import theme
 
 st.set_page_config(page_title="Settings", page_icon="⚙", layout="wide")
 theme.apply()
+theme.render_sidebar_nav()
 appcfg.init_settings()
 
 
 # ============================================================
 # Header
 # ============================================================
-badge = '<span class="badge">CLOUD</span>' if appcfg.IS_CLOUD else ""
-st.markdown(
-    f'<div class="app-title">⚙ Settings {badge}</div>'
-    '<div class="app-subtitle">Telegram · CV · Master · advanced scrape options</div>',
-    unsafe_allow_html=True,
+theme.glass_title(
+    "Settings",
+    emoji="⚙",
+    subtitle="Telegram · CV · Master · advanced scrape options",
+    badge="CLOUD" if appcfg.IS_CLOUD else "LOCAL",
 )
 
 
 def section_label(text):
-    st.markdown(
-        f'<div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:600; '
-        f'letter-spacing:0.6px; text-transform:uppercase; color:var(--color-text-muted); '
-        f'margin-top:18px; margin-bottom:6px;">{text}</div>',
-        unsafe_allow_html=True,
-    )
+    theme.section_label(text)
 
 
 # ============================================================

@@ -1,10 +1,13 @@
-"""JobsDB HK Scraper — Streamlit main page (scrape control + log + outputs).
+"""JobsDB HK Scraper — main dashboard.
 
-Settings (Telegram / CV / Master path / advanced) live on the Settings page.
-This file keeps the sidebar minimal: source / keyword / location / max_pages.
+Glassmorphism layout inspired by personal-finance-app/Home.py:
+  • Gradient title
+  • Source selector (top)
+  • 4 KPI cards (Master DB stats)
+  • 2-column: control & log (left) + source breakdown chart (right)
+  • Output download + Master table
 
-Run with:
-    streamlit run streamlit_app.py
+Scrape settings live on the Settings page.
 """
 
 import queue
@@ -22,16 +25,14 @@ import theme
 
 
 # ============================================================
-# Worker pipe & thread
+# Worker pipe & thread (unchanged from prior version)
 # ============================================================
 
 class Args:
-    """Plain attribute bag passed into scraper.scrape() (mirrors gui.py)."""
+    pass
 
 
 class StreamPipe:
-    """File-like that pushes each line into a queue.Queue."""
-
     def __init__(self, q):
         self.q = q
         self.buf = ""
@@ -86,7 +87,6 @@ def drain_log_queue():
 
 
 def run_scrape(args, q, stop_event, result):
-    """Worker thread body — redirects stdout into queue, calls scraper.scrape()."""
     old_stdout = sys.stdout
     sys.stdout = StreamPipe(q)
     try:
@@ -106,7 +106,6 @@ def run_scrape(args, q, stop_event, result):
 
 
 def build_args():
-    """Build a scraper-compatible Args object from session_state settings."""
     s = st.session_state
     a = Args()
     a.source = s.s_source
@@ -119,7 +118,6 @@ def build_args():
     a.csv = True
     a.master = (s.s_master or "").strip() if s.s_master_enabled else ""
 
-    # Telegram — Cloud always pulls from secrets, never UI
     tok, chat, _src = appcfg.telegram_credentials()
     a.telegram_enabled = bool(s.s_tg_enabled and tok and chat)
     a.telegram_token = tok
@@ -129,7 +127,6 @@ def build_args():
     a.include_actions = bool(s.s_include_actions)
     a.match_threshold = float(s.s_match_threshold or 0)
 
-    # CV: uploaded file (saved by Settings page) wins over path
     a.cv = s.uploaded_cv_path or (s.s_cv_path or "").strip()
 
     at_text = (s.s_at or "").strip()
@@ -141,79 +138,83 @@ def build_args():
 # UI
 # ============================================================
 
-st.set_page_config(page_title="JobsDB HK 爬蟲", page_icon="🇭🇰", layout="wide")
+st.set_page_config(
+    page_title="JobsDB HK",
+    page_icon="🇭🇰",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 theme.apply()
+theme.render_sidebar_nav()
 appcfg.init_settings()
 init_runtime_state()
+ss = st.session_state
 
 # ---- Header ----
-badge = '<span class="badge">CLOUD</span>' if appcfg.IS_CLOUD else ""
-st.markdown(
-    f'<div class="app-title">🇭🇰 JobsDB HK 爬蟲 {badge}</div>'
-    '<div class="app-subtitle">JobsDB · CTgoodjobs · cpjobs &nbsp;·&nbsp; Telegram + CV match</div>',
-    unsafe_allow_html=True,
+theme.glass_title(
+    "JobsDB HK",
+    emoji="🇭🇰",
+    subtitle="香港求職爬蟲 · JobsDB · CTgoodjobs · cpjobs · Telegram + CV match",
+    badge="CLOUD" if appcfg.IS_CLOUD else "LOCAL",
 )
 
 if appcfg.IS_CLOUD:
     st.markdown(
-        '<div class="cloud-banner">'
-        '☁ <b>Cloud mode</b> · Filesystem ephemeral — 完 scrape 記住按 <b>⬇ 下載</b>。'
-        'Semantic CV scoring 已關，keyword matching only.'
-        '</div>',
+        theme.cloud_banner_html(
+            "☁ <b>Cloud mode</b> · Filesystem ephemeral — 完 scrape 記住按 <b>⬇ 下載</b>。"
+            "Semantic CV scoring 已關，keyword matching only."
+        ),
         unsafe_allow_html=True,
     )
 
-# ---- Sidebar: ONLY core scrape params ----
-with st.sidebar:
-    st.markdown(
-        '<div style="font-family:var(--font-mono); font-size:0.65rem; '
-        'font-weight:600; letter-spacing:0.6px; text-transform:uppercase; '
-        'color:var(--color-text-muted); margin-bottom:6px;">SCRAPE</div>',
-        unsafe_allow_html=True,
-    )
-
-    st.selectbox(
-        "資料來源 Source",
-        options=list(scraper.SOURCES),
-        key="s_source",
-    )
-
-    st.text_input("關鍵字 Keyword", key="s_keyword")
-
-    # Location field is source-dependent
-    if st.session_state.s_source == "ctgoodjobs":
+# ---- Source selector + sidebar scrape params ----
+# Source goes in main area (like period selector in finance app)
+col_src, col_kw, col_loc, col_pg = st.columns([1.2, 1.5, 1.5, 1])
+with col_src:
+    st.selectbox("📦 來源 Source", options=list(scraper.SOURCES), key="s_source")
+with col_kw:
+    st.text_input("🔍 關鍵字 Keyword", key="s_keyword")
+with col_loc:
+    if ss.s_source == "ctgoodjobs":
         loc_options = [""] + list(scraper.CT_LOCATIONS)
-        if st.session_state.s_location not in loc_options:
-            st.session_state.s_location = ""
-        st.selectbox("地區 Location (CTgoodjobs)", loc_options, key="s_location")
-    elif st.session_state.s_source == "cpjobs":
+        if ss.s_location not in loc_options:
+            ss.s_location = ""
+        st.selectbox("📍 Location (CTgoodjobs)", loc_options, key="s_location")
+    elif ss.s_source == "cpjobs":
         loc_options = [""] + list(scraper.CP_LOCATIONS)
-        if st.session_state.s_location not in loc_options:
-            st.session_state.s_location = ""
-        st.selectbox("地區 Location (cpjobs · 4 大區)", loc_options, key="s_location")
+        if ss.s_location not in loc_options:
+            ss.s_location = ""
+        st.selectbox("📍 Location (cpjobs)", loc_options, key="s_location")
     else:
-        st.text_input("地區 Location (留空 = 全港)", key="s_location")
+        st.text_input("📍 Location", key="s_location")
+with col_pg:
+    st.number_input("📄 頁數 (0=全部)", min_value=0, max_value=999, step=1, key="s_max_pages")
 
-    st.number_input(
-        "最多頁數 (0 = 全部)",
-        min_value=0, max_value=999, step=1,
-        key="s_max_pages",
-    )
+# ---- KPI cards (Master DB stats) ----
+master_path = (ss.s_master or "").strip()
+mp = Path(master_path) if master_path else None
+stats = None
+if mp and mp.exists() and not ss.running:
+    try:
+        stats = scraper.master_stats(mp)
+    except Exception:
+        stats = None
 
-    st.markdown(
-        f'<div style="margin-top:18px; padding:10px 12px; background:var(--color-surface-alt); '
-        f'border:1px solid var(--color-border); border-radius:var(--radius-md); '
-        f'font-size:0.75rem; color:var(--color-text-secondary);">'
-        f'⚙ 進階設定（Telegram / CV / Master 等）<br>'
-        f'<span style="color:var(--color-text-muted);">→ Sidebar 入面點 <b>Settings</b> page</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+c1, c2, c3, c4 = st.columns(4)
+theme.kpi_card(c1, "Total Jobs", stats["total"] if stats else 0,
+               color=theme.PALETTE["accent"], emoji="📊")
+theme.kpi_card(c2, "Saved", stats["saved"] if stats else 0,
+               color=theme.PALETTE["warning"], emoji="⭐")
+theme.kpi_card(c3, "Applied", stats["applied"] if stats else 0,
+               color=theme.PALETTE["success"], emoji="✅")
+theme.kpi_card(c4, "Hidden", stats["hidden"] if stats else 0,
+               color=theme.PALETTE["red"], emoji="🚫")
+
+st.write("")
 
 # ---- Control bar ----
-ss = st.session_state
+theme.section_label("⚡ SCRAPE CONTROL")
 ctrl1, ctrl2, ctrl3, ctrl_status = st.columns([1, 1, 1.2, 4])
-
 with ctrl1:
     start_clicked = st.button("▶ 開始", type="primary", disabled=ss.running, use_container_width=True)
 with ctrl2:
@@ -222,13 +223,13 @@ with ctrl3:
     clear_clicked = st.button("🧹 清空 Log", disabled=ss.running, use_container_width=True)
 with ctrl_status:
     if ss.running:
-        chip = '<span class="status-chip running"><span class="dot"></span>執行中</span>'
+        chip = theme.status_chip("執行中", "running")
     elif ss.finished_msg:
-        chip = f'<span class="status-chip done"><span class="dot"></span>{ss.finished_msg}</span>'
+        chip = theme.status_chip(ss.finished_msg, "done")
     else:
-        chip = '<span class="status-chip idle"><span class="dot"></span>準備好</span>'
+        chip = theme.status_chip("準備好", "idle")
     st.markdown(
-        f'<div style="display:flex; align-items:center; height:32px; padding-left:8px;">{chip}</div>',
+        f'<div style="display:flex;align-items:center;height:38px;padding-left:10px;">{chip}</div>',
         unsafe_allow_html=True,
     )
 
@@ -268,30 +269,71 @@ if stop_clicked and ss.running:
     ss.stop_event.set()
     ss.log_lines.append(">>> 停止訊號已發送，等緊收尾…")
 
-# ---- Log display ----
-st.markdown(
-    '<div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:600; '
-    'letter-spacing:0.6px; text-transform:uppercase; color:var(--color-text-muted); '
-    'margin-top:14px; margin-bottom:4px;">LOG</div>',
-    unsafe_allow_html=True,
-)
-log_box = st.empty()
+# ---- Two-column: Log (left) + Source pie (right) ----
+left, right = st.columns([3, 2])
 
-drain_log_queue()
+with left:
+    theme.section_label("📜 LOG")
+    log_box = st.empty()
+    drain_log_queue()
+    done = False
+    if ss.log_lines and ss.log_lines[-1] == "__DONE__":
+        ss.log_lines.pop()
+        done = True
+    log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
 
-# Detect worker completion sentinel
-done = False
-if ss.log_lines and ss.log_lines[-1] == "__DONE__":
-    ss.log_lines.pop()
-    done = True
+with right:
+    theme.section_label("🥧 BY SOURCE")
+    if stats and stats.get("sources"):
+        try:
+            import pandas as pd
+            import plotly.express as px
 
-log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
+            sources_data = [
+                {"來源": k, "數量": v} for k, v in stats["sources"].items() if v > 0
+            ]
+            df = pd.DataFrame(sources_data)
+            if not df.empty:
+                palette = [
+                    theme.PALETTE["accent"],
+                    theme.PALETTE["warning"],
+                    theme.PALETTE["red"],
+                    theme.PALETTE["info"],
+                ]
+                fig = px.pie(
+                    df, values="數量", names="來源", hole=0.55,
+                    color_discrete_sequence=palette,
+                )
+                fig.update_traces(
+                    textposition="outside",
+                    textinfo="label+percent",
+                    marker=dict(line=dict(color="rgba(255,255,255,0.4)", width=2)),
+                    hovertemplate="<b>%{label}</b><br>%{value} jobs<br>%{percent}<extra></extra>",
+                )
+                theme.plotly_glass_layout(fig, height=320)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("尚無 source breakdown 資料")
+        except ImportError:
+            st.info("Plotly / pandas 未安裝，無法顯示圖表")
+    else:
+        theme.glass_card_open()
+        st.markdown(
+            f'<div style="text-align:center;padding:2rem 1rem;color:{theme.PALETTE["muted"]};">'
+            '<div style="font-size:2.5rem;margin-bottom:8px;">📭</div>'
+            '<div style="font-weight:600;color:' + theme.PALETTE["subtext"] + ';margin-bottom:4px;">'
+            'Master DB 尚未有資料</div>'
+            '<div style="font-size:0.85rem;">按 ▶ 開始 跑第一次 scrape</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        theme.glass_card_close()
 
 # ---- Poll while running ----
 if ss.running:
     if done or (ss.worker is not None and not ss.worker.is_alive()):
         ss.running = False
-        ss.finished_msg = f"完成 — {datetime.now():%H:%M:%S}"
+        ss.finished_msg = f"完成 {datetime.now():%H:%M:%S}"
         ss.last_output_path = ss.get("worker_result", {}).get("output_path")
         st.rerun()
     else:
@@ -302,46 +344,50 @@ if ss.running:
 if not ss.running and ss.last_output_path:
     p = Path(ss.last_output_path)
     if p.exists():
-        st.markdown(
-            '<div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:600; '
-            'letter-spacing:0.6px; text-transform:uppercase; color:var(--color-text-muted); '
-            'margin-top:18px; margin-bottom:6px;">📂 OUTPUT</div>',
-            unsafe_allow_html=True,
-        )
-        st.caption(f"`{p.name}`")
+        theme.section_label("📂 RUN OUTPUT")
+        theme.glass_card_open()
         try:
             data = p.read_bytes()
             mime = "text/csv" if p.suffix.lower() == ".csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            st.download_button(f"⬇ 下載 {p.name}", data, file_name=p.name, mime=mime)
-        except Exception as e:
-            st.warning(f"讀取輸出檔失敗: {e}")
-
-# ---- Master xlsx download + stats ----
-if not ss.running:
-    master_path = (ss.s_master or "").strip()
-    mp = Path(master_path) if master_path else None
-    if mp and mp.exists():
-        st.markdown(
-            '<div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:600; '
-            'letter-spacing:0.6px; text-transform:uppercase; color:var(--color-text-muted); '
-            'margin-top:18px; margin-bottom:6px;">📊 MASTER DATABASE</div>',
-            unsafe_allow_html=True,
-        )
-        try:
-            stats = scraper.master_stats(mp)
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Total jobs", stats["total"])
-            c2.metric("Saved", stats["saved"])
-            c3.metric("Applied", stats["applied"])
-            c4.metric("Hidden", stats["hidden"])
-            if stats["sources"]:
-                st.caption("By source: " + ", ".join(f"{k}={v}" for k, v in stats["sources"].items()))
-            if stats["latest_scrape"]:
-                st.caption(f"Latest scrape: {stats['latest_scrape']}")
-            data = mp.read_bytes()
+            sz_kb = len(data) / 1024
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:12px;">'
+                f'<div style="font-family:{theme.FONTS["mono"]};font-size:0.85rem;'
+                f'color:{theme.PALETTE["subtext"]};flex:1;">📄 <b>{p.name}</b>'
+                f'<span style="color:{theme.PALETTE["muted"]};margin-left:8px;">{sz_kb:.1f} KB</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
             st.download_button(
-                f"⬇ 下載 {mp.name}", data, file_name=mp.name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                f"⬇ 下載 {p.name}", data, file_name=p.name, mime=mime,
+                use_container_width=False,
             )
         except Exception as e:
-            st.warning(f"讀取 master 失敗: {e}")
+            st.warning(f"讀取輸出檔失敗: {e}")
+        theme.glass_card_close()
+
+# ---- Master xlsx download + latest scrape ----
+if not ss.running and mp and mp.exists() and stats:
+    theme.section_label("📊 MASTER DATABASE")
+    theme.glass_card_open()
+    try:
+        latest = stats.get("latest_scrape", "")
+        if latest:
+            st.caption(f"Latest scrape · {latest}")
+        data = mp.read_bytes()
+        sz_kb = len(data) / 1024
+        st.markdown(
+            f'<div style="font-family:{theme.FONTS["mono"]};font-size:0.85rem;'
+            f'color:{theme.PALETTE["subtext"]};margin-bottom:8px;">'
+            f'📄 <b>{mp.name}</b>'
+            f'<span style="color:{theme.PALETTE["muted"]};margin-left:8px;">{sz_kb:.1f} KB</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        st.download_button(
+            f"⬇ 下載 {mp.name}", data, file_name=mp.name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    except Exception as e:
+        st.warning(f"讀取 master 失敗: {e}")
+    theme.glass_card_close()
