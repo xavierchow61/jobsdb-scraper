@@ -131,17 +131,40 @@ html, body, .stApp, [class*="css"] {{
   color: var(--color-text);
 }}
 .stApp {{ background: var(--color-bg); }}
-.block-container {{ padding-top: 2rem !important; max-width: 1280px; }}
-
-/* ===== Typography ===== */
-h1, h2, h3, h4, h5 {{
-  font-family: var(--font-sans) !important;
-  color: var(--color-text);
-  letter-spacing: -0.01em;
+.block-container {{
+  padding-top: 1.25rem !important;
+  padding-bottom: 2rem !important;
+  max-width: 1280px;
 }}
-h1 {{ font-weight: 700; font-size: 1.75rem; line-height: 1.3; }}
-h2 {{ font-weight: 600; font-size: 1.25rem; line-height: 1.4; margin-top: 1.5rem; }}
-h3 {{ font-weight: 600; font-size: 1rem;    line-height: 1.5; }}
+
+/* ===== Typography (with !important to override Streamlit defaults) ===== */
+.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5,
+[data-testid="stHeading"] h1, [data-testid="stHeading"] h2, [data-testid="stHeading"] h3 {{
+  font-family: var(--font-sans) !important;
+  color: var(--color-text) !important;
+  letter-spacing: -0.01em !important;
+}}
+.stApp h1, [data-testid="stHeading"] h1 {{
+  font-weight: 700 !important;
+  font-size: 1.5rem !important;
+  line-height: 1.25 !important;
+  margin-bottom: 0.125rem !important;
+  padding-bottom: 0 !important;
+}}
+.stApp h2, [data-testid="stHeading"] h2 {{
+  font-weight: 600 !important;
+  font-size: 1.0625rem !important;
+  line-height: 1.4 !important;
+  margin-top: 1rem !important;
+  margin-bottom: 0.375rem !important;
+  padding-bottom: 0 !important;
+}}
+.stApp h3, [data-testid="stHeading"] h3 {{
+  font-weight: 600 !important;
+  font-size: 0.9375rem !important;
+  margin-top: 0.75rem !important;
+  margin-bottom: 0.25rem !important;
+}}
 
 p, label, span {{ font-family: var(--font-sans); }}
 code, pre, kbd {{ font-family: var(--font-mono) !important; font-size: 0.85em; }}
@@ -150,8 +173,10 @@ code, pre, kbd {{ font-family: var(--font-mono) !important; font-size: 0.85em; }
 .stButton > button {{
   font-family: var(--font-sans);
   font-weight: 500;
-  font-size: 0.875rem;
-  padding: 0.5rem 1rem;
+  font-size: 0.8125rem !important;
+  padding: 0.375rem 0.75rem !important;
+  min-height: 0 !important;
+  line-height: 1.4 !important;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-strong);
   background: var(--color-surface);
@@ -284,8 +309,83 @@ label, .stCheckbox label p {{
 [data-testid="stAlert"] {{
   border-radius: var(--radius-md);
   border-left: 3px solid;
-  font-size: 0.875rem;
+  font-size: 0.8125rem !important;
+  padding: 0.5rem 0.75rem !important;
   box-shadow: var(--shadow-sm);
+}}
+[data-testid="stAlert"] p {{ margin: 0 !important; line-height: 1.5; }}
+
+/* ===== Status chip (custom utility for compact status badge) ===== */
+.status-chip {{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid;
+  white-space: nowrap;
+}}
+.status-chip .dot {{
+  width: 6px; height: 6px; border-radius: 50%;
+  flex-shrink: 0;
+}}
+.status-chip.idle    {{ color: {COLORS['text_muted']}; border-color: {COLORS['border']}; background: {COLORS['surface']}; }}
+.status-chip.idle .dot    {{ background: {COLORS['text_muted']}; }}
+.status-chip.running {{ color: {COLORS['info']}; border-color: {COLORS['info']}; background: {COLORS['info_subtle']}; }}
+.status-chip.running .dot {{ background: {COLORS['info']}; animation: chipPulse 1.4s ease-in-out infinite; }}
+.status-chip.done    {{ color: {COLORS['success']}; border-color: {COLORS['success']}; background: {COLORS['success_subtle']}; }}
+.status-chip.done .dot    {{ background: {COLORS['success']}; }}
+@keyframes chipPulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.35; }} }}
+
+/* ===== Compact cloud banner ===== */
+.cloud-banner {{
+  background: {COLORS['warning_subtle']};
+  border: 1px solid #FDE68A;
+  border-left: 3px solid {COLORS['warning']};
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  color: {COLORS['text_secondary']};
+  margin: 0 0 12px;
+}}
+.cloud-banner b {{ color: {COLORS['text_primary']}; }}
+.cloud-banner code {{
+  background: rgba(0,0,0,0.05);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.95em;
+}}
+
+/* ===== App header (replaces st.title for tighter control) ===== */
+.app-title {{
+  font-family: var(--font-sans);
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: {COLORS['text_primary']};
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}}
+.app-title .badge {{
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  background: {COLORS['primary_subtle']};
+  color: {COLORS['primary']};
+  padding: 2px 6px;
+  border-radius: 4px;
+}}
+.app-subtitle {{
+  font-size: 0.75rem;
+  color: {COLORS['text_muted']};
+  margin: 2px 0 14px;
 }}
 
 /* ===== File uploader ===== */

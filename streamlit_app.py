@@ -210,14 +210,20 @@ theme.apply()
 init_state()
 cfg = load_config()
 
-st.title("JobsDB HK 爬蟲")
-st.caption("Hong Kong job aggregator · JobsDB / CTgoodjobs / cpjobs · Telegram + CV match")
+badge = '<span class="badge">CLOUD</span>' if IS_CLOUD else ""
+st.markdown(
+    f'<div class="app-title">🇭🇰 JobsDB HK 爬蟲 {badge}</div>'
+    '<div class="app-subtitle">JobsDB · CTgoodjobs · cpjobs &nbsp;·&nbsp; Telegram + CV match</div>',
+    unsafe_allow_html=True,
+)
 
 if IS_CLOUD:
-    st.warning(
-        "☁ **Cloud mode** — Streamlit Cloud filesystem 係 ephemeral，"
-        "`jobs_master.xlsx` **唔會 persist**。每次 scrape 完記住按下面 **⬇ 下載 Master** 儲低。"
-        "另外 semantic CV scoring 已關閉（pkg 太重）— 只用 keyword matching。"
+    st.markdown(
+        '<div class="cloud-banner">'
+        '☁ <b>Cloud mode</b> · Filesystem ephemeral — 完 scrape 記住按 <b>⬇ 下載</b>。'
+        'Semantic CV scoring 已關，keyword matching only.'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
 # ---- Sidebar form ----
@@ -301,8 +307,8 @@ form = dict(
 )
 
 # ---- Control bar ----
-ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1, 1, 1, 3])
 ss = st.session_state
+ctrl1, ctrl2, ctrl3, ctrl_status = st.columns([1, 1, 1.2, 4])
 
 with ctrl1:
     start_clicked = st.button("▶ 開始", type="primary", disabled=ss.running, use_container_width=True)
@@ -310,13 +316,17 @@ with ctrl2:
     stop_clicked = st.button("■ 停止", disabled=not ss.running, use_container_width=True)
 with ctrl3:
     clear_clicked = st.button("🧹 清空 Log", disabled=ss.running, use_container_width=True)
-with ctrl4:
+with ctrl_status:
     if ss.running:
-        st.info("執行中…")
+        chip = '<span class="status-chip running"><span class="dot"></span>執行中</span>'
     elif ss.finished_msg:
-        st.success(ss.finished_msg)
+        chip = f'<span class="status-chip done"><span class="dot"></span>{ss.finished_msg}</span>'
     else:
-        st.caption("準備好")
+        chip = '<span class="status-chip idle"><span class="dot"></span>準備好</span>'
+    st.markdown(
+        f'<div style="display:flex; align-items:center; height:32px; padding-left:8px;">{chip}</div>',
+        unsafe_allow_html=True,
+    )
 
 if clear_clicked:
     ss.log_lines = []
@@ -355,7 +365,12 @@ if stop_clicked and ss.running:
     ss.log_lines.append(">>> 停止訊號已發送，等緊收尾…")
 
 # ---- Log display ----
-st.subheader("日誌 Log")
+st.markdown(
+    '<div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:600; '
+    'letter-spacing:0.6px; text-transform:uppercase; color:var(--color-text-muted); '
+    'margin-top:14px; margin-bottom:4px;">LOG</div>',
+    unsafe_allow_html=True,
+)
 log_box = st.empty()
 
 drain_log_queue()
@@ -383,9 +398,13 @@ if ss.running:
 if not ss.running and ss.last_output_path:
     p = Path(ss.last_output_path)
     if p.exists():
-        st.divider()
-        st.subheader("📂 輸出")
-        st.write(f"檔案: `{p}`")
+        st.markdown(
+            '<div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:600; '
+            'letter-spacing:0.6px; text-transform:uppercase; color:var(--color-text-muted); '
+            'margin-top:18px; margin-bottom:6px;">📂 OUTPUT</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(f"`{p.name}`")
         try:
             data = p.read_bytes()
             mime = "text/csv" if p.suffix.lower() == ".csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -397,8 +416,12 @@ if not ss.running and ss.last_output_path:
 if not ss.running:
     mp = Path(master) if master else None
     if mp and mp.exists():
-        st.divider()
-        st.subheader("📊 Master xlsx")
+        st.markdown(
+            '<div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:600; '
+            'letter-spacing:0.6px; text-transform:uppercase; color:var(--color-text-muted); '
+            'margin-top:18px; margin-bottom:6px;">📊 MASTER DATABASE</div>',
+            unsafe_allow_html=True,
+        )
         try:
             stats = scraper.master_stats(mp)
             c1, c2, c3, c4 = st.columns(4)
