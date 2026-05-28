@@ -180,7 +180,7 @@ st.set_page_config(
     page_title="JOB RADAR",
     page_icon="🎯",
     layout="wide",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="collapsed",
 )
 theme.apply()
 theme.render_sidebar_nav()

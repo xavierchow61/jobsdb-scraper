@@ -152,6 +152,13 @@ footer {{ visibility: hidden; }}
 header[data-testid="stHeader"] {{ background: transparent !important; backdrop-filter: blur(8px); }}
 [data-testid="stSidebarNav"] {{ display: none !important; }}
 
+/* Single-page wizard — sidebar fully removed */
+[data-testid="stSidebar"],
+section[data-testid="stSidebar"] {{ display: none !important; }}
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
+[data-testid="collapsedControl"] {{ display: none !important; }}
+
 /* ============ Main container ============ */
 .main .block-container {{
   padding-top: 2rem !important;
@@ -739,16 +746,9 @@ def plotly_glass_layout(fig, height=380):
 # ============================================================
 
 def render_sidebar_nav():
-    """Branded sidebar with manual page_links — replaces default file-based nav."""
-    with st.sidebar:
-        st.markdown(
-            '<div style="text-align:center;padding:0.6rem 0 0.8rem;'
-            'color:white;font-size:1.3rem;font-weight:800;'
-            'letter-spacing:0.18em;'
-            'text-shadow:0 2px 6px rgba(0,0,0,0.2);">'
-            '🎯 JOB RADAR</div>',
-            unsafe_allow_html=True,
-        )
-        # Single-page wizard now lives in streamlit_app.py — no separate
-        # Settings page. Sidebar shows only the brand header.
-        st.divider()
+    """No-op. Sidebar fully removed in single-page wizard layout.
+
+    Kept as a callable for back-compat with pages that still call it
+    (Style Guide, the Settings redirect stub). Calling it now is harmless.
+    """
+    return
