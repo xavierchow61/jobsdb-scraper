@@ -411,6 +411,83 @@ header[data-testid="stHeader"] {{ background: transparent !important; backdrop-f
   border-radius: 2px;
 }}
 
+/* ============ JobsDB-style filter bar ============ */
+/* Targets the unique horizontal row that contains source(selectbox)
+   + keyword(text) + location(select|text) + pages(number) — i.e. the
+   filter row. Uses :has() (Chrome 105+, Safari 15.4+, FF 121+). */
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) {{
+  background: white;
+  border-radius: 18px;
+  padding: 10px 8px !important;
+  box-shadow: 0 8px 24px rgba(37,99,235,0.18),
+              inset 0 1px 0 rgba(255,255,255,0.9);
+  border: 2px solid rgba(255,255,255,1);
+  margin-bottom: 1rem;
+  gap: 0 !important;
+  align-items: stretch !important;
+}}
+
+/* Each column inside the filter bar */
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) > [data-testid="stColumn"] {{
+  border-right: 1px solid {P['border']};
+  padding: 4px 18px !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}}
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) > [data-testid="stColumn"]:last-child {{
+  border-right: none;
+}}
+
+/* Inside the filter bar: kill input chrome — the pill itself is the border */
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) input,
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) [data-baseweb="select"] > div,
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) [data-baseweb="input"] {{
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding-left: 0 !important;
+}}
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) input:focus {{
+  outline: none !important;
+  box-shadow: none !important;
+}}
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) input {{
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+}}
+
+/* Labels above each field: small uppercase grey, JobsDB-style */
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) label {{
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: {P['muted']} !important;
+  margin-bottom: 2px !important;
+  padding-bottom: 0 !important;
+}}
+
+/* Number input ± buttons: subtle */
+.main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) .stNumberInput button {{
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: {P['muted']} !important;
+}}
+
+/* Mobile: filter bar columns stack — give each a bottom border instead */
+@media (max-width: 768px) {{
+  .main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) > [data-testid="stColumn"] {{
+    border-right: none;
+    border-bottom: 1px solid {P['border']};
+    padding: 8px 14px !important;
+  }}
+  .main [data-testid="stHorizontalBlock"]:has(.stSelectbox):has(.stTextInput):has(.stNumberInput) > [data-testid="stColumn"]:last-child {{
+    border-bottom: none;
+  }}
+}}
+
 /* ============ Scrollbar ============ */
 ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
 ::-webkit-scrollbar-track {{ background: rgba(37,99,235,0.08); }}

@@ -171,28 +171,44 @@ if appcfg.IS_CLOUD:
         unsafe_allow_html=True,
     )
 
-# ---- Source selector + sidebar scrape params ----
-# Source goes in main area (like period selector in finance app)
-col_src, col_kw, col_loc, col_pg = st.columns([1.2, 1.5, 1.5, 1])
+# ---- JobsDB-style filter pill: 來源 | 關鍵字 | 地區 | 頁數 ----
+col_src, col_kw, col_loc, col_pg = st.columns([1.1, 1.6, 1.6, 0.9])
 with col_src:
-    st.selectbox("📦 來源 Source", options=list(scraper.SOURCES), key="s_source")
+    st.selectbox(
+        "🏷 來源",
+        options=list(scraper.SOURCES),
+        key="s_source",
+        help="揀邊個求職網爬",
+    )
 with col_kw:
-    st.text_input("🔍 關鍵字 Keyword", key="s_keyword")
+    st.text_input(
+        "🔍 關鍵字",
+        key="s_keyword",
+        placeholder="例如：Accountant",
+    )
 with col_loc:
     if ss.s_source == "ctgoodjobs":
         loc_options = [""] + list(scraper.CT_LOCATIONS)
         if ss.s_location not in loc_options:
             ss.s_location = ""
-        st.selectbox("📍 Location (CTgoodjobs)", loc_options, key="s_location")
+        st.selectbox("📍 地區", loc_options, key="s_location",
+                     help="CTgoodjobs 可揀全港地區")
     elif ss.s_source == "cpjobs":
         loc_options = [""] + list(scraper.CP_LOCATIONS)
         if ss.s_location not in loc_options:
             ss.s_location = ""
-        st.selectbox("📍 Location (cpjobs)", loc_options, key="s_location")
+        st.selectbox("📍 地區", loc_options, key="s_location",
+                     help="cpjobs 只支援 4 大區")
     else:
-        st.text_input("📍 Location", key="s_location")
+        st.text_input("📍 地區", key="s_location",
+                      placeholder="留空 = 全港")
 with col_pg:
-    st.number_input("📄 頁數 (0=全部)", min_value=0, max_value=999, step=1, key="s_max_pages")
+    st.number_input(
+        "📄 頁數",
+        min_value=0, max_value=999, step=1,
+        key="s_max_pages",
+        help="0 = 全部頁",
+    )
 
 # ---- KPI cards (Master DB stats) ----
 master_path = (ss.s_master or "").strip()
