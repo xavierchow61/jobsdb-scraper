@@ -295,22 +295,13 @@ for sk, (ck, _default, typ) in appcfg.SETTING_SPECS.items():
 toml_snippet = "\n".join(toml_lines)
 
 if appcfg.IS_CLOUD:
-    sc1, sc2 = st.columns([1, 3])
-    with sc1:
-        if st.button("💾 保存到網址", type="primary"):
-            try:
-                appcfg.update_url_from_session()
-                st.success(
-                    "✓ 設定已寫入此頁網址。請按 ⭐ 將此頁加入書籤，"
-                    "下次開啟此書籤會自動套用所有設定。"
-                )
-            except Exception as e:
-                st.error(f"寫入網址失敗：{e}")
-    with sc2:
-        st.caption(
-            "將目前所有設定（match score 下限、關鍵字、地區等）寫入此頁 URL。"
-            "收藏網址作書籤後，下次開啟即自動載入 — 無需重啟 app。"
-        )
+    st.info(
+        "💡 **目前所有設定已即時同步至網址** — "
+        "你目前所在頁面（或儀表板）嘅 URL 已經包含全部設定。"
+        "按瀏覽器 ⭐（Ctrl+D / Cmd+D）將此頁加入書籤，"
+        "下次開啟此書籤即會自動套用設定（match score、關鍵字、地區等）。"
+        "切換到儀表板時，儀表板嘅 URL 同樣會包含這些設定。"
+    )
 
     with st.expander("👥 設為全部訪客的永久預設值（管理員用）"):
         st.markdown(

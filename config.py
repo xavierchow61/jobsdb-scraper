@@ -132,8 +132,11 @@ def _coerce(value, typ, default):
 
 
 def init_settings():
-    """Populate session_state from config.json + secrets defaults (once per session)."""
+    """Populate session_state from config.json + secrets + URL params
+    (once per session), then mirror back to URL so navigation preserves state."""
     if st.session_state.get("_settings_loaded"):
+        # Already loaded — just ensure URL reflects current state for this page
+        sync_url_from_session()
         return
     cfg = _load_config_json()
 
@@ -180,6 +183,11 @@ def init_settings():
 
     st.session_state._settings_loaded = True
 
+    # Mirror to URL so the current page's URL reflects loaded state.
+    # Subsequent reruns / navigations will keep this in sync via the
+    # early-return branch above.
+    sync_url_from_session()
+
 
 def export_settings():
     """Return current settings as a plain dict for config.json (excludes Telegram secrets)."""
@@ -190,34 +198,60 @@ def export_settings():
     return out
 
 
-def update_url_from_session():
-    """Write current session_state settings to URL query params so the
-    page URL can be bookmarked and reloaded with the same settings.
+def _serialize_value(v):
+    """Serialize a Python setting value to a URL query string."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
 
-    Skips DEFAULTS_SKIP keys and zero/empty/false values to keep the
-    URL short and readable.
+
+def _should_write_to_url(v, default):
+    """Return True if this value differs from default enough to bother
+    putting in URL. We omit defaults/empties to keep URLs short."""
+    if v is None or v == "":
+        return False
+    if v is False:
+        return False
+    if isinstance(v, (int, float)) and v == 0:
+        return False
+    if v == default:
+        return False
+    return True
+
+
+def sync_url_from_session():
+    """Mirror current session_state settings into URL query params.
+
+    Called automatically at the end of every init_settings() — so every
+    page load (Dashboard, Settings, ...) writes the same settings into
+    its own URL. That means navigating between pages preserves state in
+    the URL, and bookmarking ANY page captures all current settings.
+
+    Only writes when the value differs from URL's current value, so this
+    doesn't trigger gratuitous reruns.
     """
-    try:
-        st.query_params.clear()
-    except Exception:
-        pass
     for sk, (ck, default, typ) in SETTING_SPECS.items():
         if ck in DEFAULTS_SKIP:
             continue
         v = st.session_state.get(sk)
-        # Skip empty strings, None, False, and 0 (the "do-nothing" values)
-        if v is None or v == "" or v is False:
-            continue
-        if isinstance(v, bool):
-            # Boolean True → write "true"
-            try:
-                st.query_params[ck] = "true"
-            except Exception:
-                pass
-            continue
-        if isinstance(v, (int, float)) and v == 0:
-            continue
         try:
-            st.query_params[ck] = str(v)
+            if _should_write_to_url(v, default):
+                new_val = _serialize_value(v)
+                current = st.query_params.get(ck)
+                if current != new_val:
+                    st.query_params[ck] = new_val
+            else:
+                # Value matches default — remove from URL if present
+                if ck in st.query_params:
+                    try:
+                        del st.query_params[ck]
+                    except Exception:
+                        pass
         except Exception:
+            # Be defensive: a flaky st.query_params API call must not
+            # break the page render.
             pass
+
+
+# Back-compat alias (the older "save to URL" button calls this)
+update_url_from_session = sync_url_from_session
