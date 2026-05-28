@@ -155,6 +155,19 @@ def init_settings():
         if v is not None:
             cfg.setdefault(ck, v)
 
+    # Highest precedence: URL query params (for bookmarkable settings).
+    # This is the cloud-friendly persistence — user updates URL via the
+    # "保存到網址" button, bookmarks it, and the values auto-load next visit.
+    try:
+        query = dict(st.query_params)
+    except Exception:
+        query = {}
+    for sk, (ck, _, _) in SETTING_SPECS.items():
+        if ck in DEFAULTS_SKIP:
+            continue
+        if ck in query:
+            cfg[ck] = query[ck]
+
     # Seed each session-state key
     for sk, (ck, default, typ) in SETTING_SPECS.items():
         if sk in st.session_state:
@@ -175,3 +188,23 @@ def export_settings():
         out[ck] = st.session_state.get(sk)
     # Boolean-ish stored values get coerced back to str-friendly for compat with old config
     return out
+
+
+def update_url_from_session():
+    """Write current session_state settings to URL query params so the
+    page URL can be bookmarked and reloaded with the same settings.
+
+    Skips DEFAULTS_SKIP keys and zero/empty/false values to keep the
+    URL short and readable.
+    """
+    st.query_params.clear()
+    for sk, (ck, default, typ) in SETTING_SPECS.items():
+        if ck in DEFAULTS_SKIP:
+            continue
+        v = st.session_state.get(sk)
+        # Skip empty strings, None, False, and 0 (the "do-nothing" values)
+        if v is None or v == "" or v is False:
+            continue
+        if isinstance(v, (int, float)) and v == 0:
+            continue
+        st.query_params[ck] = str(v)

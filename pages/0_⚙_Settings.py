@@ -295,24 +295,39 @@ for sk, (ck, _default, typ) in appcfg.SETTING_SPECS.items():
 toml_snippet = "\n".join(toml_lines)
 
 if appcfg.IS_CLOUD:
-    st.caption(
-        "雲端模式下，設定僅在此 session 內保留。"
-        "如需永久儲存（例如 match score 下限、預設關鍵字、地區等），"
-        "請將以下內容複製到 **Streamlit Cloud → Settings → Secrets**。"
-        "保存後重啟 app（dashboard 右上角 ⋮ → Reboot），下次開啟即自動套用。"
-    )
-    st.code(toml_snippet, language="toml")
+    sc1, sc2 = st.columns([1, 3])
+    with sc1:
+        if st.button("💾 保存到網址", type="primary"):
+            appcfg.update_url_from_session()
+            st.success(
+                "✓ 設定已寫入此頁網址。請按 ⭐ 將此頁加入書籤，"
+                "下次開啟此書籤會自動套用所有設定。"
+            )
+            st.rerun()
+    with sc2:
+        st.caption(
+            "將目前所有設定（match score 下限、關鍵字、地區等）寫入此頁 URL。"
+            "收藏網址作書籤後，下次開啟即自動載入 — 無需重啟 app。"
+        )
+
+    with st.expander("👥 設為全部訪客的永久預設值（管理員用）"):
+        st.markdown(
+            "如果想令**所有訪客**第一次開啟都用相同預設值，"
+            "請將以下 TOML 內容複製到 **Streamlit Cloud → Settings → Secrets**，"
+            "保存後重啟 app（dashboard ⋮ → Reboot）。"
+        )
+        st.code(toml_snippet, language="toml")
 else:
     sc1, sc2 = st.columns([1, 3])
     with sc1:
-        if st.button("💾 寫入 config.json"):
+        if st.button("💾 寫入 config.json", type="primary"):
             cfg_existing = appcfg._load_config_json()
             cfg_existing.update(appcfg.export_settings())
             ok, msg = appcfg.save_config_json(cfg_existing)
             (st.success if ok else st.error)(msg)
     with sc2:
         st.caption(
-            "點擊將目前所有設定（包括 match score 下限、CV 路徑、進階選項等）"
+            "將目前所有設定（match score 下限、CV 路徑、進階選項等）"
             "寫入 `config.json`，下次開啟 app 自動載入。"
         )
     with st.expander("🔍 預覽即將儲存的內容"):
