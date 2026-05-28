@@ -263,18 +263,58 @@ with tab_adv:
         help="例如 `09:30` 表示等候今日／明日 9:30；`2026-06-01 08:00` 表示等候指定時刻。",
     )
 
-    st.divider()
 
-    # Save to config (local only)
-    if appcfg.IS_CLOUD:
-        st.caption(
-            "💡 雲端模式下，config.json 不會持久儲存（檔案系統重啟即清空）。"
-            "設定僅在此 session 內保留。如需永久更改預設值，請至 "
-            "**Streamlit Cloud → Settings → Secrets** 寫入 `[defaults]` 區塊。"
-        )
+# ============================================================
+# 💾 保存設定（在所有 tab 之外，永遠可見）
+# ============================================================
+st.divider()
+st.markdown(
+    f'<div style="font-family:var(--font-mono); font-size:0.7rem; font-weight:700; '
+    f'letter-spacing:0.08em; text-transform:uppercase; '
+    f'color:{theme.PALETTE["accent_dark"]}; margin-bottom:8px;">'
+    f'💾 保存設定</div>',
+    unsafe_allow_html=True,
+)
+
+# Build TOML snippet of persistable settings — use the SAME skip set
+# config.init_settings() uses when reading [defaults], so what you see
+# here is exactly what would be re-loaded next session.
+toml_lines = ["[defaults]"]
+for sk, (ck, _default, typ) in appcfg.SETTING_SPECS.items():
+    if ck in appcfg.DEFAULTS_SKIP:
+        continue
+    v = st.session_state.get(sk)
+    if v is None or v == "":
+        continue
+    if typ is bool:
+        toml_lines.append(f"{ck} = {str(v).lower()}")
+    elif typ in (int, float):
+        toml_lines.append(f"{ck} = {v}")
     else:
-        if st.button("💾 儲存全部設定到 config.json"):
+        toml_lines.append(f'{ck} = "{v}"')
+toml_snippet = "\n".join(toml_lines)
+
+if appcfg.IS_CLOUD:
+    st.caption(
+        "雲端模式下，設定僅在此 session 內保留。"
+        "如需永久儲存（例如 match score 下限、預設關鍵字、地區等），"
+        "請將以下內容複製到 **Streamlit Cloud → Settings → Secrets**。"
+        "保存後重啟 app（dashboard 右上角 ⋮ → Reboot），下次開啟即自動套用。"
+    )
+    st.code(toml_snippet, language="toml")
+else:
+    sc1, sc2 = st.columns([1, 3])
+    with sc1:
+        if st.button("💾 寫入 config.json"):
             cfg_existing = appcfg._load_config_json()
             cfg_existing.update(appcfg.export_settings())
             ok, msg = appcfg.save_config_json(cfg_existing)
             (st.success if ok else st.error)(msg)
+    with sc2:
+        st.caption(
+            "點擊將目前所有設定（包括 match score 下限、CV 路徑、進階選項等）"
+            "寫入 `config.json`，下次開啟 app 自動載入。"
+        )
+    with st.expander("🔍 預覽即將儲存的內容"):
+        st.code(toml_snippet, language="toml")
+

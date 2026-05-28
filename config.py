@@ -92,6 +92,12 @@ def telegram_credentials():
 # Each settings field lives at st.session_state["s_<name>"]. Widgets bind via
 # key="s_<name>". Defaults are seeded once per session in init_settings().
 
+# Keys to skip when loading [defaults] from Streamlit Secrets (and when
+# exporting the TOML snippet on the Settings page). Either per-machine
+# paths, credentials, or per-run values that shouldn't be a "default".
+DEFAULTS_SKIP = {"master", "output", "tg_token", "tg_chat", "at"}
+
+
 SETTING_SPECS = {
     # key:           (config_key, default, type_caster)
     "s_source":          ("source",          "cpjobs",     str),
@@ -139,12 +145,15 @@ def init_settings():
     if have_creds and "tg_enabled" not in cfg:
         cfg["tg_enabled"] = True
 
-    # Overlay secret defaults (only for non-sensitive fields)
-    for k in ("source", "keyword", "location", "max_pages", "delay",
-              "full_jd", "match_threshold"):
-        v = _secret("defaults", k, None)
+    # Overlay [defaults] from Streamlit Secrets for every persistable setting.
+    # Skip per-machine paths and credentials (those live in [telegram] section
+    # or in config.json directly).
+    for sk, (ck, _, _) in SETTING_SPECS.items():
+        if ck in DEFAULTS_SKIP:
+            continue
+        v = _secret("defaults", ck, None)
         if v is not None:
-            cfg.setdefault(k, v)
+            cfg.setdefault(ck, v)
 
     # Seed each session-state key
     for sk, (ck, default, typ) in SETTING_SPECS.items():
