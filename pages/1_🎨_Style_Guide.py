@@ -43,7 +43,7 @@ st.markdown(
     <div style="font-family:{F['mono']}; font-size:11px; color:{C['primary']}; letter-spacing:1px; text-transform:uppercase;">Living Style Guide · v1.0</div>
     <h1 style="margin:6px 0 4px; font-size:2.25rem; font-weight:700;">JobsDB HK 設計系統</h1>
     <div style="color:{C['text_secondary']}; font-size:1rem; max-width:640px;">
-      Professional · Efficient · Slate &amp; Blue. 設計 tokens、字體、間距、按鈕、表單、卡片變體全部喺呢度文檔化。Components 喺 streamlit_app.py 入面用 <code>theme.apply()</code> 注入。
+      Professional · Efficient · Slate &amp; Blue. 設計 tokens、字體、間距、按鈕、表單、卡片變體全部在此文檔化。Components 在 streamlit_app.py 內透過 <code>theme.apply()</code> 注入。
     </div>
     </div>""",
     unsafe_allow_html=True,
@@ -206,7 +206,7 @@ st.markdown("##### Custom panel")
 st.markdown(
     f"""<div style="background:{C['surface']}; border:1px solid {C['border']}; border-left: 3px solid {C['primary']}; border-radius:{R['md']}; padding:16px 18px; box-shadow:{SH['sm']};">
     <div style="font-family:{F['mono']}; font-size:11px; color:{C['primary']}; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px;">Pro Tip</div>
-    <div style="color:{C['text_primary']}; font-size:0.9rem;">用 <code style="background:{C['surface_alt']}; padding:2px 6px; border-radius:4px;">--match-threshold 60</code> 過濾 CV 唔啱嘅 job，唔好曬 Telegram。</div>
+    <div style="color:{C['text_primary']}; font-size:0.9rem;">使用 <code style="background:{C['surface_alt']}; padding:2px 6px; border-radius:4px;">--match-threshold 60</code> 過濾 CV 不匹配的工作，避免淹沒 Telegram 通知。</div>
     </div>""",
     unsafe_allow_html=True,
 )

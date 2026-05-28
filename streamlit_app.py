@@ -107,7 +107,7 @@ def run_scrape(args, q, stop_event, result):
         if args.at:
             scraper.wait_until(args.at, stop_event=stop_event)
             if stop_event.is_set():
-                print("已取消（未開始爬）")
+                print("已取消（尚未開始爬取）")
                 return
         path = scraper.scrape(args, stop_event=stop_event)
         if path:
@@ -207,9 +207,9 @@ theme.glass_title(
 if appcfg.IS_CLOUD:
     st.markdown(
         theme.cloud_banner_html(
-            "☁ <b>雲端模式</b> · 檔案系統重啟即清 — "
-            "完成爬取後記住按 <b>⬇ 下載</b> 儲低。"
-            "CV 語意比對已關閉，只用關鍵字配對。"
+            "☁ <b>雲端模式</b> · 檔案系統重啟即清空 — "
+            "完成爬取後請按 <b>⬇ 下載</b> 儲存。"
+            "CV 語意比對已關閉，僅使用關鍵字配對。"
         ),
         unsafe_allow_html=True,
     )
@@ -225,7 +225,7 @@ with col_src:
         "🏷 來源",
         options=list(UI_SOURCES),
         key="s_source",
-        help="揀邊個求職網爬",
+        help="選擇求職網站",
     )
 with col_kw:
     st.text_input(
@@ -342,7 +342,7 @@ if start_clicked and not ss.running:
 
 if stop_clicked and ss.running:
     ss.stop_event.set()
-    ss.log_lines.append(">>> 停止訊號已發送，等緊收尾…")
+    ss.log_lines.append(">>> 停止訊號已發送，正在結束…")
 
 # ---- Log (full width) ----
 theme.section_label("📜 日誌")
@@ -365,7 +365,7 @@ if ss.running:
             ss.finished_kind = "warning"
             # Append a tip into the log for visibility
             ss.log_lines.append("")
-            ss.log_lines.append("💡 提示：JobsDB 對 datacenter IP 嚴格。試下用 cpjobs 或 ctgoodjobs，或本機跑。")
+            ss.log_lines.append("💡 提示：JobsDB 對資料中心 IP 較嚴格。建議改用 cpjobs 或 ctgoodjobs，或本機運行。")
         elif "HTTP 4" in log_text or "HTTP 5" in log_text:
             ss.finished_msg = "完成（有錯誤）"
             ss.finished_kind = "warning"

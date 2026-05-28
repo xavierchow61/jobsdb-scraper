@@ -60,7 +60,7 @@ def _load_config_json():
 def save_config_json(values):
     """Persist edited values to config.json (local only — Cloud FS is ephemeral)."""
     if IS_CLOUD:
-        return False, "Cloud mode: config.json 唔會 persist (filesystem ephemeral). 改用 Streamlit Secrets。"
+        return False, "雲端模式下 config.json 不會持久儲存（檔案系統重啟即清空）。請改用 Streamlit Secrets。"
     try:
         CONFIG_PATH.write_text(
             json.dumps(values, indent=2, ensure_ascii=False),
