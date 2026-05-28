@@ -1,0 +1,37 @@
+# Render Blueprint — one-click setup for bot_listener_cloud.
+#
+# To use:
+#   1. Push this repo to GitHub.
+#   2. In Render dashboard → New → Blueprint → connect this repo.
+#   3. Render reads this file, creates the service.
+#   4. Set the 4 env vars below (Render won't auto-populate; sync: false).
+#   5. After first deploy, visit https://<service>.onrender.com/set-webhook
+#      to register the Telegram webhook with your bot.
+#
+# Note: Render free Web Services spin down after ~15 min of no traffic
+# and take ~30-50s to wake up. For your first click after idle, the
+# Prev/Next button might lag — Telegram retries the webhook so it
+# still works. If you want always-on, upgrade the plan or use an
+# uptime monitor (e.g. uptimerobot.com) to ping / every 14 min.
+
+services:
+  - type: web
+    name: jobradar-bot
+    env: python
+    plan: free
+    region: singapore   # Closest to HK; change if needed
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn bot_listener_cloud:app --bind 0.0.0.0:$PORT --workers 1 --timeout 30
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false      # Set manually in Render dashboard
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false      # Optional; if set, included in setWebhook

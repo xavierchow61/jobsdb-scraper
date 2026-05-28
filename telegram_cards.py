@@ -93,13 +93,18 @@ def update_batch_idx(supabase, batch_id, idx):
 # Card rendering
 # ============================================================
 
-def render_card(jobs, idx, source):
-    """Render the HTML body for the card at index `idx`."""
+def render_card(jobs, idx, source=""):
+    """Render the HTML body for the card at index `idx`.
+
+    `source` can be passed; if jobs[idx]["Source"] is set, it overrides.
+    """
     total = len(jobs)
-    body = scraper.format_telegram_card(jobs[idx], source)
+    job = jobs[idx]
+    actual_source = (job.get("Source") or source or "?").strip()
+    body = scraper.format_telegram_card(job, actual_source)
     header = (
         f"📦 <b>第 {idx + 1} / {total} 張</b>"
-        f"  ·  <i>{source}</i>\n\n"
+        f"  ·  <i>{actual_source}</i>\n\n"
     )
     return header + body
 
@@ -206,6 +211,11 @@ def create_and_send_batch(supabase, token, chat_id, jobs, source):
     """
     if not jobs:
         return None, None
+    # Embed the source into each row so the bot_listener (which only
+    # sees the batch via Supabase) can render the card correctly.
+    for j in jobs:
+        if not j.get("Source"):
+            j["Source"] = source
     try:
         batch_id = create_batch(supabase, chat_id, jobs)
     except Exception as e:

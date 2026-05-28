@@ -3,6 +3,9 @@ openpyxl>=3.1.0
 pdfminer.six>=20231228
 streamlit>=1.32.0
 supabase>=2.4.0
+# bot_listener_cloud.py only — but harmless on Streamlit Cloud
+flask>=3.0.0
+gunicorn>=21.2.0
 
 # Optional — semantic CV scoring via sentence-transformers.
 # Adds ~800MB (PyTorch + model). May exceed Streamlit Cloud's 1GB RAM limit.
