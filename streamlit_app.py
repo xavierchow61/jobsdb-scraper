@@ -24,6 +24,43 @@ import scraper
 import theme
 
 
+# Popular HK districts that work well on JobsDB's URL slug filter
+# (build_search_url turns these into in-<slug> path segments).
+JOBSDB_DISTRICTS = [
+    "",  # empty = 全港
+    "Central",
+    "Admiralty",
+    "Sheung Wan",
+    "Wan Chai",
+    "Causeway Bay",
+    "North Point",
+    "Quarry Bay",
+    "Taikoo Shing",
+    "Aberdeen",
+    "Tsim Sha Tsui",
+    "Jordan",
+    "Mong Kok",
+    "Prince Edward",
+    "Hung Hom",
+    "Kowloon Bay",
+    "Kwun Tong",
+    "Lai Chi Kok",
+    "Cheung Sha Wan",
+    "Lai King",
+    "Sha Tin",
+    "Tai Wai",
+    "Tai Po",
+    "Tsuen Wan",
+    "Kwai Chung",
+    "Tsing Yi",
+    "Tseung Kwan O",
+    "Tuen Mun",
+    "Yuen Long",
+    "Tin Shui Wai",
+    "Tung Chung",
+]
+
+
 # ============================================================
 # Worker pipe & thread (unchanged from prior version)
 # ============================================================
@@ -187,21 +224,27 @@ with col_kw:
         placeholder="例如：Accountant",
     )
 with col_loc:
+    fmt_district = lambda x: x if x else "全港"
     if ss.s_source == "ctgoodjobs":
         loc_options = [""] + list(scraper.CT_LOCATIONS)
         if ss.s_location not in loc_options:
             ss.s_location = ""
         st.selectbox("📍 地區", loc_options, key="s_location",
-                     help="CTgoodjobs 可揀全港地區")
+                     format_func=fmt_district,
+                     help="CTgoodjobs 全港所有地區")
     elif ss.s_source == "cpjobs":
         loc_options = [""] + list(scraper.CP_LOCATIONS)
         if ss.s_location not in loc_options:
             ss.s_location = ""
         st.selectbox("📍 地區", loc_options, key="s_location",
+                     format_func=fmt_district,
                      help="cpjobs 只支援 4 大區")
-    else:
-        st.text_input("📍 地區", key="s_location",
-                      placeholder="留空 = 全港")
+    else:  # jobsdb
+        if ss.s_location not in JOBSDB_DISTRICTS:
+            ss.s_location = ""
+        st.selectbox("📍 地區", JOBSDB_DISTRICTS, key="s_location",
+                     format_func=fmt_district,
+                     help="揀常見工作地區（留空 = 全港）")
 with col_pg:
     st.number_input(
         "📄 頁數",
