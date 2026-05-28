@@ -151,28 +151,30 @@ def persist_cv_keywords():
 def build_args():
     s = st.session_state
     a = Args()
-    a.source = s.s_source
-    a.keyword = (s.s_keyword or "").strip() or "Accountant"
-    a.location = (s.s_location or "").strip()
-    a.max_pages = max(0, int(s.s_max_pages or 0))
-    a.full_jd = bool(s.s_full_jd)
-    a.delay = max(0.0, float(s.s_delay or 1.5))
-    a.output = (s.s_output or "").strip() or None
+    # Use .get() throughout — session_state may not be fully seeded if
+    # this is called from an unusual code path.
+    a.source = s.get("s_source", "cpjobs")
+    a.keyword = (s.get("s_keyword") or "").strip() or "Accountant"
+    a.location = (s.get("s_location") or "").strip()
+    a.max_pages = max(0, int(s.get("s_max_pages") or 0))
+    a.full_jd = bool(s.get("s_full_jd", True))
+    a.delay = max(0.0, float(s.get("s_delay") or 1.5))
+    a.output = (s.get("s_output") or "").strip() or None
     a.csv = True
-    a.master = (s.s_master or "").strip() if s.s_master_enabled else ""
+    a.master = (s.get("s_master") or "").strip() if s.get("s_master_enabled") else ""
 
     tok, chat, _src = appcfg.telegram_credentials()
-    a.telegram_enabled = bool(s.s_tg_enabled and tok and chat)
+    a.telegram_enabled = bool(s.get("s_tg_enabled") and tok and chat)
     a.telegram_token = tok
     a.telegram_chat_id = chat
-    a.telegram_max = int(s.s_tg_max or 0)
+    a.telegram_max = int(s.get("s_tg_max") or 0)
     a.telegram_delay = 1.5
-    a.include_actions = bool(s.s_include_actions)
-    a.match_threshold = float(s.s_match_threshold or 0)
+    a.include_actions = bool(s.get("s_include_actions"))
+    a.match_threshold = float(s.get("s_match_threshold") or 0)
 
-    a.cv = s.uploaded_cv_path or (s.s_cv_path or "").strip()
+    a.cv = s.get("uploaded_cv_path") or (s.get("s_cv_path") or "").strip()
 
-    at_text = (s.s_at or "").strip()
+    at_text = (s.get("s_at") or "").strip()
     a.at = scraper.parse_at(at_text) if at_text else None
     return a
 
@@ -261,7 +263,8 @@ with col_pg:
 
 
 # ---- KPI cards (Master DB stats) ----
-master_path = (ss.s_master or "").strip()
+# Use .get() to avoid AttributeError if init_settings hasn't seeded s_master
+master_path = (st.session_state.get("s_master") or "").strip()
 mp = Path(master_path) if master_path else None
 stats = None
 if mp and mp.exists() and not ss.running:

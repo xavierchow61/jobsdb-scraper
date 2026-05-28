@@ -111,13 +111,13 @@ with tab_tg:
             "最多推送（0 = 無上限）",
             min_value=0, max_value=9999, step=1,
             key="s_tg_max",
-            disabled=not st.session_state.s_tg_enabled,
+            disabled=not st.session_state.get("s_tg_enabled", False),
         )
     with cc2:
         st.checkbox(
             "加 儲存 / 隱藏 / 已申請 按鈕（需 bot_listener.py）",
             key="s_include_actions",
-            disabled=not st.session_state.s_tg_enabled,
+            disabled=not st.session_state.get("s_tg_enabled", False),
         )
 
     if st.button("🔔 測試 Telegram", disabled=not (tok and chat)):
@@ -298,12 +298,14 @@ if appcfg.IS_CLOUD:
     sc1, sc2 = st.columns([1, 3])
     with sc1:
         if st.button("💾 保存到網址", type="primary"):
-            appcfg.update_url_from_session()
-            st.success(
-                "✓ 設定已寫入此頁網址。請按 ⭐ 將此頁加入書籤，"
-                "下次開啟此書籤會自動套用所有設定。"
-            )
-            st.rerun()
+            try:
+                appcfg.update_url_from_session()
+                st.success(
+                    "✓ 設定已寫入此頁網址。請按 ⭐ 將此頁加入書籤，"
+                    "下次開啟此書籤會自動套用所有設定。"
+                )
+            except Exception as e:
+                st.error(f"寫入網址失敗：{e}")
     with sc2:
         st.caption(
             "將目前所有設定（match score 下限、關鍵字、地區等）寫入此頁 URL。"
