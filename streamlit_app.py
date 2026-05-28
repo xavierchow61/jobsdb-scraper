@@ -105,6 +105,7 @@ def init_runtime_state():
     ss.setdefault("running", False)
     ss.setdefault("last_output_path", None)
     ss.setdefault("finished_msg", None)
+    ss.setdefault("finished_kind", "done")
     ss.setdefault("worker_result", {})
     ss.setdefault("uploaded_cv_path", None)
     ss.setdefault("uploaded_cv_name", None)
@@ -253,6 +254,17 @@ with col_pg:
         help="0 = 全部頁",
     )
 
+# Pre-warn: JobsDB blocks Streamlit Cloud's datacenter IPs (HTTP 403)
+if ss.s_source == "jobsdb" and appcfg.IS_CLOUD:
+    st.markdown(
+        theme.cloud_banner_html(
+            "⚠ <b>JobsDB 喺雲端通常會 block</b>（HTTP 403 Forbidden）— "
+            "JobsDB 對 datacenter IP 比較嚴。建議揀 <b>cpjobs</b> 或 "
+            "<b>ctgoodjobs</b>（佢哋通常 OK），或者本機跑 Streamlit 用住宅 IP。"
+        ),
+        unsafe_allow_html=True,
+    )
+
 # ---- KPI cards (Master DB stats) ----
 master_path = (ss.s_master or "").strip()
 mp = Path(master_path) if master_path else None
@@ -288,7 +300,8 @@ with ctrl_status:
     if ss.running:
         chip = theme.status_chip("執行中", "running")
     elif ss.finished_msg:
-        chip = theme.status_chip(ss.finished_msg, "done")
+        kind = ss.get("finished_kind", "done")
+        chip = theme.status_chip(ss.finished_msg, kind)
     else:
         chip = theme.status_chip("準備好", "idle")
     st.markdown(
@@ -346,7 +359,23 @@ log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
 if ss.running:
     if done or (ss.worker is not None and not ss.worker.is_alive()):
         ss.running = False
-        ss.finished_msg = f"完成 {datetime.now():%H:%M:%S}"
+        # Scan log for site-block / error patterns to set status colour
+        log_text = "\n".join(ss.log_lines)
+        if "HTTP 403" in log_text:
+            ss.finished_msg = "已被封鎖 (HTTP 403)"
+            ss.finished_kind = "warning"
+            # Append a tip into the log for visibility
+            ss.log_lines.append("")
+            ss.log_lines.append("💡 提示：JobsDB 對 datacenter IP 嚴格。試下用 cpjobs 或 ctgoodjobs，或本機跑。")
+        elif "HTTP 4" in log_text or "HTTP 5" in log_text:
+            ss.finished_msg = "完成（有錯誤）"
+            ss.finished_kind = "warning"
+        elif "✗" in log_text or "ERROR:" in log_text:
+            ss.finished_msg = "完成（有錯誤）"
+            ss.finished_kind = "warning"
+        else:
+            ss.finished_msg = f"完成 {datetime.now():%H:%M:%S}"
+            ss.finished_kind = "done"
         ss.last_output_path = ss.get("worker_result", {}).get("output_path")
         st.rerun()
     else:

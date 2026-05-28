@@ -379,6 +379,8 @@ header[data-testid="stHeader"] {{ background: transparent !important; backdrop-f
 .status-chip.running .dot {{ background: {P['accent']}; animation: chipPulse 1.4s ease-in-out infinite; }}
 .status-chip.done    {{ color: {P['success']}; border-color: {P['success']}; background: rgba(220,252,231,0.95); }}
 .status-chip.done .dot    {{ background: {P['success']}; }}
+.status-chip.warning {{ color: {P['warning']}; border-color: {P['warning']}; background: rgba(254,243,199,0.95); }}
+.status-chip.warning .dot {{ background: {P['warning']}; }}
 @keyframes chipPulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: 0.35; }} }}
 
 /* ============ Cloud banner (compact) ============ */
