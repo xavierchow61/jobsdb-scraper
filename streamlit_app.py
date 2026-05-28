@@ -24,33 +24,12 @@ import scraper
 import theme
 
 
-# Hong Kong's 18 official districts (區) — used as JobsDB's location filter.
-# Key  = URL slug value (英文，scraper.build_search_url 會 hyphenate)
-# Value = display label (中文，按港島/九龍/新界分組)
-JOBSDB_DISTRICTS = {
-    "": "全港（不限地區）",
-    # 港島 4 區
-    "Central and Western District": "中西區（港島）",
-    "Wan Chai District":            "灣仔區（港島）",
-    "Eastern District":             "東區（港島）",
-    "Southern District":            "南區（港島）",
-    # 九龍 5 區
-    "Yau Tsim Mong District":       "油尖旺區（九龍）",
-    "Sham Shui Po District":        "深水埗區（九龍）",
-    "Kowloon City District":        "九龍城區（九龍）",
-    "Wong Tai Sin District":        "黃大仙區（九龍）",
-    "Kwun Tong District":           "觀塘區（九龍）",
-    # 新界 9 區
-    "Kwai Tsing District":          "葵青區（新界）",
-    "Tsuen Wan District":           "荃灣區（新界）",
-    "Tuen Mun District":            "屯門區（新界）",
-    "Yuen Long District":           "元朗區（新界）",
-    "Northern District":            "北區（新界）",
-    "Tai Po District":              "大埔區（新界）",
-    "Sha Tin District":             "沙田區（新界）",
-    "Sai Kung District":            "西貢區（新界）",
-    "Islands District":             "離島區（新界）",
-}
+# JobsDB is hidden from the UI because hk.jobsdb.com blocks Streamlit
+# Cloud's datacenter IP range with HTTP 403. The scraper still supports
+# it from the CLI for local use (--source jobsdb). To re-enable in the
+# UI, add "jobsdb" back to UI_SOURCES below (and reinstate the
+# JOBSDB_DISTRICTS dict from the git history if you want the dropdown).
+UI_SOURCES = ("cpjobs", "ctgoodjobs")
 
 
 # ============================================================
@@ -204,9 +183,12 @@ if appcfg.IS_CLOUD:
 # ---- JobsDB-style filter pill: 來源 | 關鍵字 | 地區 | 頁數 ----
 col_src, col_kw, col_loc, col_pg = st.columns([1.1, 1.6, 1.6, 0.9])
 with col_src:
+    # Coerce away from a removed value (e.g. legacy "jobsdb" in saved config)
+    if ss.s_source not in UI_SOURCES:
+        ss.s_source = UI_SOURCES[0]
     st.selectbox(
         "🏷 來源",
-        options=list(scraper.SOURCES),
+        options=list(UI_SOURCES),
         key="s_source",
         help="揀邊個求職網爬",
     )
@@ -225,24 +207,13 @@ with col_loc:
         st.selectbox("📍 地區", loc_options, key="s_location",
                      format_func=fmt_district,
                      help="CTgoodjobs 全港所有地區")
-    elif ss.s_source == "cpjobs":
+    else:  # cpjobs
         loc_options = [""] + list(scraper.CP_LOCATIONS)
         if ss.s_location not in loc_options:
             ss.s_location = ""
         st.selectbox("📍 地區", loc_options, key="s_location",
                      format_func=fmt_district,
                      help="cpjobs 只支援 4 大區")
-    else:  # jobsdb
-        jobsdb_keys = list(JOBSDB_DISTRICTS.keys())
-        if ss.s_location not in jobsdb_keys:
-            ss.s_location = ""
-        st.selectbox(
-            "📍 地區",
-            jobsdb_keys,
-            key="s_location",
-            format_func=lambda x: JOBSDB_DISTRICTS[x],
-            help="香港 18 區（JobsDB 官方篩選層級）",
-        )
 with col_pg:
     st.number_input(
         "📄 頁數",
@@ -251,16 +222,6 @@ with col_pg:
         help="0 = 全部頁",
     )
 
-# Pre-warn: JobsDB blocks Streamlit Cloud's datacenter IPs (HTTP 403)
-if ss.s_source == "jobsdb" and appcfg.IS_CLOUD:
-    st.markdown(
-        theme.cloud_banner_html(
-            "⚠ <b>JobsDB 喺雲端通常會 block</b>（HTTP 403 Forbidden）— "
-            "JobsDB 對 datacenter IP 比較嚴。建議揀 <b>cpjobs</b> 或 "
-            "<b>ctgoodjobs</b>（佢哋通常 OK），或者本機跑 Streamlit 用住宅 IP。"
-        ),
-        unsafe_allow_html=True,
-    )
 
 # ---- KPI cards (Master DB stats) ----
 master_path = (ss.s_master or "").strip()

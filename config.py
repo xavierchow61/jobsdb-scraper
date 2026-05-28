@@ -94,7 +94,7 @@ def telegram_credentials():
 
 SETTING_SPECS = {
     # key:           (config_key, default, type_caster)
-    "s_source":          ("source",          "jobsdb",     str),
+    "s_source":          ("source",          "cpjobs",     str),
     "s_keyword":         ("keyword",         "Accountant", str),
     "s_location":        ("location",        "",           str),
     "s_max_pages":       ("max_pages",       0,            int),
