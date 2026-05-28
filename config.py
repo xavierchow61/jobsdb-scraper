@@ -71,6 +71,17 @@ def save_config_json(values):
         return False, f"寫入失敗: {e}"
 
 
+def supabase_credentials():
+    """Return (url, anon_key) for Supabase, or ('', '') if not configured.
+
+    Read first from st.secrets [supabase] block, then from env vars
+    (for the bot_listener running on Render / locally with .env).
+    """
+    url = _secret("supabase", "url") or os.getenv("SUPABASE_URL", "")
+    key = _secret("supabase", "anon_key") or _secret("supabase", "key") or os.getenv("SUPABASE_KEY", "")
+    return url.strip(), key.strip()
+
+
 # Telegram token helpers — Cloud routes through st.secrets, never user input.
 def telegram_credentials():
     """Return (token, chat_id, source) — source ∈ {'secrets', 'config', 'none'}."""

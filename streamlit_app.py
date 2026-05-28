@@ -29,6 +29,11 @@ try:
 except ImportError:
     cv_match = None
 
+try:
+    import telegram_cards
+except ImportError:
+    telegram_cards = None
+
 
 # JobsDB hidden — Cloud datacenter IPs get HTTP 403 from hk.jobsdb.com.
 # CLI / local can still use `--source jobsdb`.
@@ -98,9 +103,83 @@ def drain_log_queue():
             ss.log_lines.append(line)
 
 
+def _post_scrape_send_paginated(args, csv_path):
+    """After scrape, read the per-run CSV and send ONE paginated Telegram
+    card (instead of N individual messages). Requires Supabase to be
+    configured and the scrape to have produced new rows.
+    """
+    if telegram_cards is None:
+        print("  [tg-cards] module not loaded; skipping paginated send")
+        return
+    if not args.telegram_token or not args.telegram_chat_id:
+        return
+    sb_url, sb_key = appcfg.supabase_credentials()
+    if not (sb_url and sb_key):
+        print("  [tg-cards] Supabase 未設定，跳過 paginated 推送")
+        return
+    sup = telegram_cards.supabase_client(sb_url, sb_key)
+    if sup is None:
+        return
+
+    # Read the per-run CSV — these are exactly the jobs scraped this run
+    import csv as _csv
+    from pathlib import Path as _P
+    p = _P(str(csv_path)) if csv_path else None
+    if not p or not p.exists():
+        print("  [tg-cards] 無 per-run CSV，跳過")
+        return
+    try:
+        with open(p, "r", encoding="utf-8-sig", newline="") as fh:
+            rows = list(_csv.DictReader(fh))
+    except Exception as e:
+        print(f"  [tg-cards] CSV 讀取失敗: {e}")
+        return
+    if not rows:
+        print("  [tg-cards] CSV 為空，跳過")
+        return
+
+    # Apply match-threshold filter (mirroring scraper.process_new_row logic)
+    threshold = float(getattr(args, "match_threshold", 0) or 0)
+    if threshold > 0:
+        kept = []
+        for r in rows:
+            try:
+                s = float(r.get("Match Score") or 0)
+            except (TypeError, ValueError):
+                s = 0
+            if s >= threshold:
+                kept.append(r)
+        skipped = len(rows) - len(kept)
+        if skipped:
+            print(f"  [tg-cards] {skipped} 條低於下限 {threshold:.0f}，已過濾")
+        rows = kept
+    if not rows:
+        print(f"  [tg-cards] 無工作達到下限，0 通知")
+        return
+
+    # Apply telegram_max cap (mirror scraper)
+    limit = int(getattr(args, "telegram_max", 0) or 0)
+    if limit > 0:
+        rows = rows[:limit]
+
+    batch_id, msg_id = telegram_cards.create_and_send_batch(
+        sup, args.telegram_token, args.telegram_chat_id,
+        rows, args.source,
+    )
+    if msg_id:
+        print(f"  [tg-cards] ✓ 已推送 paginated card (batch={batch_id}, jobs={len(rows)})")
+    else:
+        print(f"  [tg-cards] ✗ paginated 推送失敗")
+
+
 def run_scrape(args, q, stop_event, result):
     old_stdout = sys.stdout
     sys.stdout = StreamPipe(q)
+    # Disable scraper's per-row Telegram — we'll send ONE paginated card
+    # after scrape finishes (paginated_card flow). Keep token/chat for
+    # threshold/max bookkeeping inside scraper, but skip the per-row send.
+    wanted_tg = bool(getattr(args, "telegram_enabled", False))
+    args.telegram_enabled = False
     try:
         if args.at:
             scraper.wait_until(args.at, stop_event=stop_event)
@@ -110,6 +189,14 @@ def run_scrape(args, q, stop_event, result):
         path = scraper.scrape(args, stop_event=stop_event)
         if path:
             result["output_path"] = str(path)
+
+        # Re-enable for the paginated send + actually send
+        if wanted_tg:
+            args.telegram_enabled = True
+            try:
+                _post_scrape_send_paginated(args, path)
+            except Exception as e:
+                print(f"  [tg-cards] 推送階段錯誤: {e}")
     except Exception as e:
         print(f"✗ 錯誤: {e}")
     finally:
