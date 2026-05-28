@@ -183,9 +183,10 @@ if appcfg.IS_CLOUD:
 # ---- JobsDB-style filter pill: 來源 | 關鍵字 | 地區 | 頁數 ----
 col_src, col_kw, col_loc, col_pg = st.columns([1.1, 1.6, 1.6, 0.9])
 with col_src:
-    # Coerce away from a removed value (e.g. legacy "jobsdb" in saved config)
-    if ss.s_source not in UI_SOURCES:
-        ss.s_source = UI_SOURCES[0]
+    # Defensive: use .get() to avoid AttributeError if session_state was
+    # cleared / not yet seeded. Also auto-migrate legacy "jobsdb" away.
+    if st.session_state.get("s_source") not in UI_SOURCES:
+        st.session_state.s_source = UI_SOURCES[0]
     st.selectbox(
         "🏷 來源",
         options=list(UI_SOURCES),
@@ -200,17 +201,19 @@ with col_kw:
     )
 with col_loc:
     fmt_district = lambda x: x if x else "全港"
-    if ss.s_source == "ctgoodjobs":
+    current_src = st.session_state.get("s_source", UI_SOURCES[0])
+    current_loc = st.session_state.get("s_location", "")
+    if current_src == "ctgoodjobs":
         loc_options = [""] + list(scraper.CT_LOCATIONS)
-        if ss.s_location not in loc_options:
-            ss.s_location = ""
+        if current_loc not in loc_options:
+            st.session_state.s_location = ""
         st.selectbox("📍 地區", loc_options, key="s_location",
                      format_func=fmt_district,
                      help="CTgoodjobs 全港所有地區")
     else:  # cpjobs
         loc_options = [""] + list(scraper.CP_LOCATIONS)
-        if ss.s_location not in loc_options:
-            ss.s_location = ""
+        if current_loc not in loc_options:
+            st.session_state.s_location = ""
         st.selectbox("📍 地區", loc_options, key="s_location",
                      format_func=fmt_district,
                      help="cpjobs 只支援 4 大區")
