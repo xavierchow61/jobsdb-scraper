@@ -23,6 +23,11 @@ import config as appcfg
 import scraper
 import theme
 
+try:
+    import cv_match
+except ImportError:
+    cv_match = None
+
 
 # JobsDB is hidden from the UI because hk.jobsdb.com blocks Streamlit
 # Cloud's datacenter IP range with HTTP 403. The scraper still supports
@@ -112,6 +117,35 @@ def run_scrape(args, q, stop_event, result):
     finally:
         sys.stdout = old_stdout
         q.put(("__DONE__", False))
+
+
+def persist_cv_keywords():
+    """If the user edited CV keywords on the Settings page, write them as
+    a .profile.json sibling to the CV file so cv_match.load_cv() picks
+    up the edits instead of the auto-extracted set.
+    """
+    if cv_match is None:
+        return
+    cv_path = (
+        st.session_state.get("uploaded_cv_path")
+        or st.session_state.get("s_cv_path", "").strip()
+    )
+    if not cv_path or not Path(cv_path).exists():
+        return
+    edited = st.session_state.get("cv_keywords") or []
+    if not edited:
+        return
+    try:
+        profile = cv_match.CVProfile(
+            keywords=set(edited),
+            years=st.session_state.get("cv_years"),
+            raw_chars=0,        # cv_match.load_cv recomputes this
+            source_path=cv_path,
+        )
+        cv_match.save_profile(profile)
+    except Exception as e:
+        # Non-fatal — keyword scoring will fall back to auto-extracted set
+        print(f"  [CV] could not save edited keywords: {e}")
 
 
 def build_args():
@@ -281,6 +315,10 @@ if start_clicked and not ss.running:
     except Exception as e:
         st.error(f"參數錯誤: {e}")
         st.stop()
+
+    # If the user edited CV keywords on the Settings page, persist them
+    # so cv_match.load_cv() reads the edits instead of auto-extracting.
+    persist_cv_keywords()
 
     ss.log_lines = []
     ss.finished_msg = None

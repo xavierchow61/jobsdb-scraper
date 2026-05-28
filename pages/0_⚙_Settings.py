@@ -17,6 +17,11 @@ import config as appcfg
 import scraper
 import theme
 
+try:
+    import cv_match
+except ImportError:
+    cv_match = None
+
 st.set_page_config(page_title="設定", page_icon="⚙", layout="wide")
 theme.apply()
 theme.render_sidebar_nav()
@@ -138,12 +143,16 @@ with tab_cv:
         tmp.close()
         st.session_state.uploaded_cv_path = tmp.name
         st.session_state.uploaded_cv_name = uploaded_cv.name
+        # Reset keyword cache so we re-extract from the new CV
+        st.session_state.pop("cv_keywords_for", None)
         st.success(f"✓ 已上傳：{uploaded_cv.name}")
     elif st.session_state.get("uploaded_cv_name"):
         st.info(f"📎 已上傳：{st.session_state.uploaded_cv_name}")
         if st.button("✗ 清除上傳"):
             st.session_state.uploaded_cv_path = None
             st.session_state.uploaded_cv_name = None
+            for k in ("cv_keywords", "cv_keywords_for", "cv_years"):
+                st.session_state.pop(k, None)
             st.rerun()
 
     if not appcfg.IS_CLOUD:
@@ -152,6 +161,73 @@ with tab_cv:
             key="s_cv_path",
             help="本地 PDF / TXT 嘅完整路徑（爬蟲會自動讀取）",
         )
+
+    # ---- Keyword editor (auto-extract + edit/add) ----
+    cv_path_for_extract = st.session_state.get("uploaded_cv_path") or st.session_state.get("s_cv_path", "")
+    if cv_path_for_extract and cv_match is not None:
+        # Re-extract keywords when the CV changes
+        if st.session_state.get("cv_keywords_for") != cv_path_for_extract:
+            with st.spinner("抽取 CV 關鍵字…"):
+                try:
+                    profile = cv_match.load_cv(cv_path_for_extract, use_saved_profile=False)
+                except Exception as e:
+                    profile = None
+                    st.warning(f"抽取失敗：{e}")
+            if profile:
+                st.session_state.cv_keywords = sorted(profile.keywords)
+                st.session_state.cv_years = profile.years
+                st.session_state.cv_keywords_for = cv_path_for_extract
+            else:
+                st.session_state.cv_keywords = []
+                st.session_state.cv_years = None
+                st.session_state.cv_keywords_for = cv_path_for_extract
+
+        kw_list = st.session_state.get("cv_keywords") or []
+        years = st.session_state.get("cv_years")
+
+        st.divider()
+        st.markdown(
+            f"#### 🔑 CV 關鍵字 "
+            f"<span style='font-family:monospace;font-size:0.75rem;color:#64748B;'>"
+            f"({len(kw_list)} 個" + (f" · {years} 年經驗" if years else "") + ")</span>",
+            unsafe_allow_html=True,
+        )
+        st.caption("自動由 CV 抽取，用 comma 分隔。可以剔走唔啱嘅、或者加新嘅自訂關鍵字。")
+
+        edited_text = st.text_area(
+            "關鍵字（comma 分隔）",
+            value=", ".join(kw_list),
+            key="cv_keywords_textarea",
+            height=140,
+            label_visibility="collapsed",
+        )
+
+        # Parse + dedupe (case-insensitive, preserve original casing)
+        parsed = []
+        seen_lower = set()
+        for raw in edited_text.split(","):
+            k = raw.strip()
+            if not k:
+                continue
+            kl = k.lower()
+            if kl in seen_lower:
+                continue
+            seen_lower.add(kl)
+            parsed.append(k)
+        st.session_state.cv_keywords = parsed
+
+        b1, b2, b3 = st.columns([1, 1, 3])
+        with b1:
+            if st.button("🔄 重新抽取", help="重新由 CV 文字提取（會覆蓋你嘅編輯）"):
+                st.session_state.pop("cv_keywords_for", None)
+                st.rerun()
+        with b2:
+            if st.button("🧹 清空"):
+                st.session_state.cv_keywords = []
+                st.session_state.cv_keywords_textarea = ""
+                st.rerun()
+    elif cv_path_for_extract and cv_match is None:
+        st.warning("`cv_match` 模組未載入，無法抽取關鍵字。")
 
     st.number_input(
         "Telegram 推送 Match Score 下限（0 = 全部推送）",
