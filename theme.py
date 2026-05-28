@@ -749,6 +749,6 @@ def render_sidebar_nav():
             '🎯 JOB RADAR</div>',
             unsafe_allow_html=True,
         )
-        st.page_link("streamlit_app.py", label="儀表板", icon="🏠")
-        st.page_link("pages/0_⚙_Settings.py", label="設定", icon="⚙")
+        # Single-page wizard now lives in streamlit_app.py — no separate
+        # Settings page. Sidebar shows only the brand header.
         st.divider()

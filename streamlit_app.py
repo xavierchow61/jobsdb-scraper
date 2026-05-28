@@ -1,17 +1,18 @@
-"""JobsDB HK Scraper — main dashboard.
+"""JOB RADAR — single-page wizard layout (5 sub-tabs).
 
-Glassmorphism layout inspired by personal-finance-app/Home.py:
-  • Gradient title
-  • Source selector (top)
-  • 4 KPI cards (Master DB stats)
-  • 2-column: control & log (left) + source breakdown chart (right)
-  • Output download + Master table
+  Tab 1  📄 上傳 CV          — Upload + auto-extract + edit keywords
+  Tab 2  🎯 比對分數         — Match score threshold for Telegram push
+  Tab 3  📨 Telegram 通知   — Bot status, enable toggle, test ping
+  Tab 4  🔍 搜尋 & 開始       — Source / keyword / location / pages + advanced + start
+  Tab 5  📊 結果 & 日誌      — KPIs + live log + output downloads
 
-Scrape settings live on the Settings page.
+Single page means session_state preserves everything without page-nav
+URL/localStorage gymnastics — clean fix for the persistence problem.
 """
 
 import queue
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime
@@ -29,16 +30,13 @@ except ImportError:
     cv_match = None
 
 
-# JobsDB is hidden from the UI because hk.jobsdb.com blocks Streamlit
-# Cloud's datacenter IP range with HTTP 403. The scraper still supports
-# it from the CLI for local use (--source jobsdb). To re-enable in the
-# UI, add "jobsdb" back to UI_SOURCES below (and reinstate the
-# JOBSDB_DISTRICTS dict from the git history if you want the dropdown).
+# JobsDB hidden — Cloud datacenter IPs get HTTP 403 from hk.jobsdb.com.
+# CLI / local can still use `--source jobsdb`.
 UI_SOURCES = ("cpjobs", "ctgoodjobs")
 
 
 # ============================================================
-# Worker pipe & thread (unchanged from prior version)
+# Worker pipe & thread
 # ============================================================
 
 class Args:
@@ -120,15 +118,13 @@ def run_scrape(args, q, stop_event, result):
 
 
 def persist_cv_keywords():
-    """If the user edited CV keywords on the Settings page, write them as
-    a .profile.json sibling to the CV file so cv_match.load_cv() picks
-    up the edits instead of the auto-extracted set.
-    """
+    """Save edited keywords as .profile.json next to the CV so cv_match
+    reads our edits instead of auto-extracting on each scrape."""
     if cv_match is None:
         return
     cv_path = (
         st.session_state.get("uploaded_cv_path")
-        or st.session_state.get("s_cv_path", "").strip()
+        or (st.session_state.get("s_cv_path") or "").strip()
     )
     if not cv_path or not Path(cv_path).exists():
         return
@@ -139,20 +135,17 @@ def persist_cv_keywords():
         profile = cv_match.CVProfile(
             keywords=set(edited),
             years=st.session_state.get("cv_years"),
-            raw_chars=0,        # cv_match.load_cv recomputes this
+            raw_chars=0,
             source_path=cv_path,
         )
         cv_match.save_profile(profile)
     except Exception as e:
-        # Non-fatal — keyword scoring will fall back to auto-extracted set
         print(f"  [CV] could not save edited keywords: {e}")
 
 
 def build_args():
     s = st.session_state
     a = Args()
-    # Use .get() throughout — session_state may not be fully seeded if
-    # this is called from an unusual code path.
     a.source = s.get("s_source", "cpjobs")
     a.keyword = (s.get("s_keyword") or "").strip() or "Accountant"
     a.location = (s.get("s_location") or "").strip()
@@ -180,16 +173,13 @@ def build_args():
 
 
 # ============================================================
-# UI
+# Page setup
 # ============================================================
 
 st.set_page_config(
     page_title="JOB RADAR",
     page_icon="🎯",
     layout="wide",
-    # "auto" lets Streamlit collapse the sidebar on mobile / narrow viewports.
-    # Hard-coding "expanded" forces it open on phones, where it overlays
-    # the main content and looks like the sidebar is "blocking" the page.
     initial_sidebar_state="auto",
 )
 theme.apply()
@@ -198,7 +188,7 @@ appcfg.init_settings()
 init_runtime_state()
 ss = st.session_state
 
-# ---- Header ----
+# Header
 theme.glass_title(
     "JOB RADAR",
     emoji="🎯",
@@ -216,159 +206,504 @@ if appcfg.IS_CLOUD:
         unsafe_allow_html=True,
     )
 
-# ---- JobsDB-style filter pill: 來源 | 關鍵字 | 地區 | 頁數 ----
-col_src, col_kw, col_loc, col_pg = st.columns([1.1, 1.6, 1.6, 0.9])
-with col_src:
-    # Defensive: use .get() to avoid AttributeError if session_state was
-    # cleared / not yet seeded. Also auto-migrate legacy "jobsdb" away.
-    if st.session_state.get("s_source") not in UI_SOURCES:
-        st.session_state.s_source = UI_SOURCES[0]
-    st.selectbox(
-        "🏷 來源",
-        options=list(UI_SOURCES),
-        key="s_source",
-        help="選擇求職網站",
-    )
-with col_kw:
-    st.text_input(
-        "🔍 關鍵字",
-        key="s_keyword",
-        placeholder="例如：Accountant",
-    )
-with col_loc:
-    fmt_district = lambda x: x if x else "全港"
-    current_src = st.session_state.get("s_source", UI_SOURCES[0])
-    current_loc = st.session_state.get("s_location", "")
-    if current_src == "ctgoodjobs":
-        loc_options = [""] + list(scraper.CT_LOCATIONS)
-        if current_loc not in loc_options:
-            st.session_state.s_location = ""
-        st.selectbox("📍 地區", loc_options, key="s_location",
-                     format_func=fmt_district,
-                     help="CTgoodjobs 全港所有地區")
-    else:  # cpjobs
-        loc_options = [""] + list(scraper.CP_LOCATIONS)
-        if current_loc not in loc_options:
-            st.session_state.s_location = ""
-        st.selectbox("📍 地區", loc_options, key="s_location",
-                     format_func=fmt_district,
-                     help="cpjobs 只支援 4 大區")
-with col_pg:
-    st.number_input(
-        "📄 頁數",
-        min_value=0, max_value=999, step=1,
-        key="s_max_pages",
-        help="0 = 全部頁",
-    )
-
-
-# ---- KPI cards (Master DB stats) ----
-# Use .get() to avoid AttributeError if init_settings hasn't seeded s_master
-master_path = (st.session_state.get("s_master") or "").strip()
-mp = Path(master_path) if master_path else None
-stats = None
-if mp and mp.exists() and not ss.running:
-    try:
-        stats = scraper.master_stats(mp)
-    except Exception:
-        stats = None
-
-c1, c2, c3, c4 = st.columns(4)
-theme.kpi_card(c1, "工作總數", stats["total"] if stats else 0,
-               color=theme.PALETTE["accent"], emoji="📊")
-theme.kpi_card(c2, "已儲存", stats["saved"] if stats else 0,
-               color=theme.PALETTE["warning"], emoji="⭐")
-theme.kpi_card(c3, "已申請", stats["applied"] if stats else 0,
-               color=theme.PALETTE["success"], emoji="✅")
-theme.kpi_card(c4, "已隱藏", stats["hidden"] if stats else 0,
-               color=theme.PALETTE["red"], emoji="🚫")
-
-st.write("")
-
-# ---- Control bar ----
-theme.section_label("⚡ 爬蟲控制")
-ctrl1, ctrl2, ctrl3, ctrl_status = st.columns([1, 1, 1.2, 4])
-with ctrl1:
-    start_clicked = st.button("▶ 開始", type="primary", disabled=ss.running, use_container_width=True)
-with ctrl2:
-    stop_clicked = st.button("■ 停止", disabled=not ss.running, use_container_width=True)
-with ctrl3:
-    clear_clicked = st.button("🧹 清空 Log", disabled=ss.running, use_container_width=True)
-with ctrl_status:
-    if ss.running:
-        chip = theme.status_chip("執行中", "running")
-    elif ss.finished_msg:
-        kind = ss.get("finished_kind", "done")
-        chip = theme.status_chip(ss.finished_msg, kind)
-    else:
-        chip = theme.status_chip("準備好", "idle")
+# When a scrape is running, show a top-level hint pointing to the Results tab
+if ss.running:
     st.markdown(
-        f'<div style="display:flex;align-items:center;height:38px;padding-left:10px;">{chip}</div>',
+        f'<div style="background:linear-gradient(135deg, rgba(239,246,255,0.95), rgba(255,255,255,0.85));'
+        f'backdrop-filter:blur(14px);border:1px solid rgba(59,130,246,0.4);'
+        f'border-left:4px solid {theme.PALETTE["accent"]};border-radius:12px;'
+        f'padding:8px 14px;font-size:0.85rem;color:{theme.PALETTE["subtext"]};'
+        f'margin:0 0 14px;box-shadow:0 4px 14px rgba(59,130,246,0.12);">'
+        f'⚙ <b>爬取中…</b> · 切換至「📊 結果 & 日誌」tab 查看實時進度'
+        '</div>',
         unsafe_allow_html=True,
     )
 
-if clear_clicked:
-    ss.log_lines = []
-    ss.finished_msg = None
-    st.rerun()
 
-if start_clicked and not ss.running:
-    try:
-        args = build_args()
-    except Exception as e:
-        st.error(f"參數錯誤: {e}")
-        st.stop()
+# ============================================================
+# 5 sub-tabs
+# ============================================================
 
-    # If the user edited CV keywords on the Settings page, persist them
-    # so cv_match.load_cv() reads the edits instead of auto-extracting.
-    persist_cv_keywords()
+tab_cv, tab_score, tab_tg, tab_search, tab_results = st.tabs([
+    "📄 上傳 CV",
+    "🎯 比對分數",
+    "📨 Telegram 通知",
+    "🔍 搜尋 & 開始",
+    "📊 結果 & 日誌",
+])
 
-    ss.log_lines = []
-    ss.finished_msg = None
-    ss.last_output_path = None
-    ss.log_queue = queue.Queue()
-    ss.stop_event = threading.Event()
-    ss.log_lines.append(f"關鍵字: {args.keyword}  |  Source: {args.source}  |  Location: {args.location or '(無)'}")
-    ss.log_lines.append(f"最多頁數: {'全部' if args.max_pages == 0 else args.max_pages}  |  完整 JD: {'是' if args.full_jd else '否'}  |  Delay: {args.delay}s")
-    if args.at:
-        ss.log_lines.append(f"預定 {args.at:%Y-%m-%d %H:%M:%S} 開始")
-    ss.log_lines.append("-" * 60)
-    ss.running = True
-    ss.worker_result = {}
-    ss.worker = threading.Thread(
-        target=run_scrape,
-        args=(args, ss.log_queue, ss.stop_event, ss.worker_result),
-        daemon=True,
+
+# ─────────────────────────────────────────────────────────────
+# Tab 1: 上傳 CV + 關鍵字編輯
+# ─────────────────────────────────────────────────────────────
+with tab_cv:
+    theme.section_label("📄 上傳 CV")
+
+    if appcfg.IS_CLOUD:
+        st.caption(
+            "⚠ 雲端模式下語意比對已關閉（sentence-transformers 套件太重），僅使用關鍵字比對。"
+        )
+
+    uploaded_cv = st.file_uploader(
+        "上傳 CV（PDF 或 TXT）", type=["pdf", "txt"], key="cv_uploader",
     )
-    ss.worker.start()
-    st.rerun()
+    if uploaded_cv is not None:
+        suffix = Path(uploaded_cv.name).suffix or ".pdf"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(uploaded_cv.getvalue())
+        tmp.close()
+        st.session_state.uploaded_cv_path = tmp.name
+        st.session_state.uploaded_cv_name = uploaded_cv.name
+        st.session_state.pop("cv_keywords_for", None)
+        st.success(f"✓ 已上傳：{uploaded_cv.name}")
+    elif st.session_state.get("uploaded_cv_name"):
+        st.info(f"📎 已上傳：{st.session_state.uploaded_cv_name}")
+        if st.button("✗ 清除上傳", key="cv_clear"):
+            st.session_state.uploaded_cv_path = None
+            st.session_state.uploaded_cv_name = None
+            for k in ("cv_keywords", "cv_keywords_for", "cv_years"):
+                st.session_state.pop(k, None)
+            st.rerun()
 
-if stop_clicked and ss.running:
-    ss.stop_event.set()
-    ss.log_lines.append(">>> 停止訊號已發送，正在結束…")
+    if not appcfg.IS_CLOUD:
+        st.text_input(
+            "或填入本地 CV 路徑",
+            key="s_cv_path",
+            help="本地 PDF / TXT 的完整路徑（爬蟲會自動讀取）",
+        )
 
-# ---- Log (full width) ----
-theme.section_label("📜 日誌")
-log_box = st.empty()
-drain_log_queue()
-done = False
-if ss.log_lines and ss.log_lines[-1] == "__DONE__":
-    ss.log_lines.pop()
-    done = True
-log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
+    # Keyword editor
+    cv_path_for_extract = (
+        st.session_state.get("uploaded_cv_path")
+        or st.session_state.get("s_cv_path", "")
+    )
+    if cv_path_for_extract and cv_match is not None:
+        if st.session_state.get("cv_keywords_for") != cv_path_for_extract:
+            with st.spinner("抽取 CV 關鍵字…"):
+                try:
+                    profile = cv_match.load_cv(cv_path_for_extract, use_saved_profile=False)
+                except Exception as e:
+                    profile = None
+                    st.warning(f"抽取失敗：{e}")
+            if profile:
+                st.session_state.cv_keywords = sorted(profile.keywords)
+                st.session_state.cv_years = profile.years
+                st.session_state.cv_keywords_for = cv_path_for_extract
+            else:
+                st.session_state.cv_keywords = []
+                st.session_state.cv_years = None
+                st.session_state.cv_keywords_for = cv_path_for_extract
 
-# ---- Poll while running ----
+        kw_list = st.session_state.get("cv_keywords") or []
+        years = st.session_state.get("cv_years")
+
+        st.divider()
+        st.markdown(
+            f"#### 🔑 CV 關鍵字 "
+            f"<span style='font-family:monospace;font-size:0.75rem;color:#64748B;'>"
+            f"({len(kw_list)} 個" + (f" · {years} 年經驗" if years else "") + ")</span>",
+            unsafe_allow_html=True,
+        )
+        st.caption("自動由 CV 抽取，以逗號分隔。可移除不適合的，或新增自訂關鍵字。")
+
+        edited_text = st.text_area(
+            "關鍵字（以逗號分隔）",
+            value=", ".join(kw_list),
+            key="cv_keywords_textarea",
+            height=140,
+            label_visibility="collapsed",
+        )
+
+        parsed = []
+        seen_lower = set()
+        for raw in edited_text.split(","):
+            k = raw.strip()
+            if not k:
+                continue
+            kl = k.lower()
+            if kl in seen_lower:
+                continue
+            seen_lower.add(kl)
+            parsed.append(k)
+        st.session_state.cv_keywords = parsed
+
+        b1, b2, _ = st.columns([1, 1, 3])
+        with b1:
+            if st.button("🔄 重新抽取", help="重新由 CV 文字提取（將覆蓋你的編輯）"):
+                st.session_state.pop("cv_keywords_for", None)
+                st.rerun()
+        with b2:
+            if st.button("🧹 清空", key="cv_kw_clear"):
+                st.session_state.cv_keywords = []
+                st.session_state.cv_keywords_textarea = ""
+                st.rerun()
+    elif cv_path_for_extract and cv_match is None:
+        st.warning("`cv_match` 模組未載入，無法抽取關鍵字。")
+    else:
+        st.caption("尚未上傳 CV — 上傳後會自動抽取關鍵字。")
+
+
+# ─────────────────────────────────────────────────────────────
+# Tab 2: 比對分數
+# ─────────────────────────────────────────────────────────────
+with tab_score:
+    theme.section_label("🎯 比對分數下限")
+
+    st.markdown(
+        "設定 Telegram 推送的 **匹配分數下限**。系統將每個工作的 JD 與你的 "
+        "CV 關鍵字做比對，計算 0–100 分。"
+    )
+
+    score_threshold = st.number_input(
+        "下限（0 = 全部推送）",
+        min_value=0.0, max_value=100.0, step=5.0,
+        key="s_match_threshold",
+        help="只有匹配分數 ≥ 此值的工作才會推送至 Telegram。主資料庫仍會記錄全部結果。",
+    )
+
+    # Visual guide
+    st.markdown(
+        f"""<div style="display:flex;gap:8px;margin-top:14px;font-size:0.8rem;">
+        <div style="flex:1;background:{theme.PALETTE['red_subtle']};border:1px solid {theme.PALETTE['red']};
+             border-radius:10px;padding:10px;text-align:center;color:{theme.PALETTE['red']};">
+          <b>0 – 39</b><br/><span style="font-size:0.75rem;">關聯度低</span>
+        </div>
+        <div style="flex:1;background:{theme.PALETTE['warning_subtle']};border:1px solid {theme.PALETTE['warning']};
+             border-radius:10px;padding:10px;text-align:center;color:{theme.PALETTE['warning']};">
+          <b>40 – 69</b><br/><span style="font-size:0.75rem;">有關但唔強</span>
+        </div>
+        <div style="flex:1;background:{theme.PALETTE['success_subtle']};border:1px solid {theme.PALETTE['success']};
+             border-radius:10px;padding:10px;text-align:center;color:{theme.PALETTE['success']};">
+          <b>70 – 100</b><br/><span style="font-size:0.75rem;">高度匹配</span>
+        </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    if score_threshold > 0:
+        st.success(f"目前設定：只推送 ≥ **{score_threshold:.0f} 分** 的工作至 Telegram。")
+    else:
+        st.info("目前設定：**全部**工作都會推送（無下限）。")
+
+
+# ─────────────────────────────────────────────────────────────
+# Tab 3: 📨 Telegram 通知
+# ─────────────────────────────────────────────────────────────
+with tab_tg:
+    theme.section_label("📨 TELEGRAM 通知設定")
+
+    tok, chat, src = appcfg.telegram_credentials()
+
+    if appcfg.IS_CLOUD:
+        if src == "secrets":
+            masked_chat = chat[:3] + "…" + chat[-2:] if len(chat) > 5 else "…"
+            st.success(
+                f"✓ 已透過 Streamlit Cloud Secrets 設定 · "
+                f"Chat ID `{masked_chat}` · Token 已隱藏"
+            )
+        else:
+            st.error("✗ 雲端模式下尚未設定 Telegram Secrets")
+            st.markdown(
+                "請至 **Streamlit Cloud → Settings → Secrets**，貼上以下內容，"
+                "**請勿在介面直接顯示 token**："
+            )
+            st.code(
+                '[telegram]\ntoken = "您的 BotFather token"\nchat_id = "您的 chat ID"',
+                language="toml",
+            )
+    else:
+        if src == "secrets":
+            st.info("ℹ Telegram 認證來自本地 `.streamlit/secrets.toml`（建議做法）")
+        elif src == "config":
+            st.warning(
+                "⚠ Telegram token 目前儲存於 `config.json`。"
+                "建議改放至 `.streamlit/secrets.toml`（已 gitignore，不會外洩）。"
+            )
+        else:
+            st.caption("尚未設定。可在下方填寫，或寫入 `.streamlit/secrets.toml`。")
+
+        with st.expander("✏ 本地編輯 Telegram 認證（僅限本機）", expanded=src == "none"):
+            st.text_input(
+                "Bot Token (BotFather)",
+                value=tok,
+                type="password",
+                key="s_tg_token_local",
+                help="本地 token — 不會推送至 GitHub（config.json 已 gitignore）",
+            )
+            st.text_input("Chat ID (numeric)", value=chat, key="s_tg_chat_local")
+            if st.button("💾 寫入 config.json", key="tg_save_local"):
+                cfg_existing = appcfg._load_config_json()
+                cfg_existing["tg_token"] = st.session_state.s_tg_token_local
+                cfg_existing["tg_chat"] = st.session_state.s_tg_chat_local
+                ok, msg = appcfg.save_config_json(cfg_existing)
+                (st.success if ok else st.error)(msg)
+                st.rerun()
+
+    st.divider()
+
+    if src in ("secrets", "config"):
+        toggle_help = (
+            "已設定 token，預設自動開啟。"
+            "雲端 session 重啟後會保持開啟（因為 secrets 仍然存在）。"
+        )
+    else:
+        toggle_help = "尚未設定 token，此項目暫時無法啟用。"
+
+    st.checkbox(
+        "啟用 Telegram 推送（每條新工作即時通知）",
+        key="s_tg_enabled",
+        disabled=src == "none",
+        help=toggle_help,
+    )
+
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        st.number_input(
+            "最多推送（0 = 無上限）",
+            min_value=0, max_value=9999, step=1,
+            key="s_tg_max",
+            disabled=not st.session_state.get("s_tg_enabled", False),
+        )
+    with cc2:
+        st.checkbox(
+            "加 儲存 / 隱藏 / 已申請 按鈕（需 bot_listener.py）",
+            key="s_include_actions",
+            disabled=not st.session_state.get("s_tg_enabled", False),
+        )
+
+    if st.button("🔔 測試 Telegram", disabled=not (tok and chat)):
+        ok, msg = scraper.telegram_test_ping(tok, chat)
+        (st.success if ok else st.error)(msg)
+
+
+# ─────────────────────────────────────────────────────────────
+# Tab 4: 🔍 搜尋 & 開始
+# ─────────────────────────────────────────────────────────────
+with tab_search:
+    theme.section_label("🔍 搜尋條件")
+
+    # Filter pill
+    col_src, col_kw, col_loc, col_pg = st.columns([1.1, 1.6, 1.6, 0.9])
+    with col_src:
+        if st.session_state.get("s_source") not in UI_SOURCES:
+            st.session_state.s_source = UI_SOURCES[0]
+        st.selectbox(
+            "🏷 來源",
+            options=list(UI_SOURCES),
+            key="s_source",
+            help="選擇求職網站",
+        )
+    with col_kw:
+        st.text_input(
+            "🔍 關鍵字",
+            key="s_keyword",
+            placeholder="例如：Accountant",
+        )
+    with col_loc:
+        fmt_district = lambda x: x if x else "全港"
+        current_src = st.session_state.get("s_source", UI_SOURCES[0])
+        current_loc = st.session_state.get("s_location", "")
+        if current_src == "ctgoodjobs":
+            loc_options = [""] + list(scraper.CT_LOCATIONS)
+            if current_loc not in loc_options:
+                st.session_state.s_location = ""
+            st.selectbox("📍 地區", loc_options, key="s_location",
+                         format_func=fmt_district,
+                         help="CTgoodjobs 全港所有地區")
+        else:
+            loc_options = [""] + list(scraper.CP_LOCATIONS)
+            if current_loc not in loc_options:
+                st.session_state.s_location = ""
+            st.selectbox("📍 地區", loc_options, key="s_location",
+                         format_func=fmt_district,
+                         help="cpjobs 只支援 4 大區")
+    with col_pg:
+        st.number_input(
+            "📄 頁數",
+            min_value=0, max_value=999, step=1,
+            key="s_max_pages",
+            help="0 = 全部頁",
+        )
+
+    # Advanced expander
+    with st.expander("⚡ 進階設定（可選）"):
+        a1, a2 = st.columns(2)
+        with a1:
+            st.number_input(
+                "請求間隔（秒）",
+                min_value=0.5, max_value=10.0, step=0.5,
+                key="s_delay",
+                help="每次抓取之間的等待時間，避免被網站限流。",
+            )
+        with a2:
+            st.checkbox(
+                "抓取完整 JD（自動分段：職責 / 要求）",
+                key="s_full_jd",
+                help="關閉可加快爬取速度，但只會取得工作標題。",
+            )
+        st.text_input(
+            "定時開始（留空 = 即時執行）",
+            key="s_at",
+            placeholder="HH:MM 或 YYYY-MM-DD HH:MM",
+            help="例如 `09:30` 表示等候今日／明日 9:30；`2026-06-01 08:00` 表示等候指定時刻。",
+        )
+
+    st.divider()
+    theme.section_label("⚡ 爬蟲控制")
+
+    ctrl1, ctrl2, ctrl3, ctrl_status = st.columns([1, 1, 1.2, 4])
+    with ctrl1:
+        start_clicked = st.button(
+            "▶ 開始", type="primary",
+            disabled=ss.running, use_container_width=True,
+        )
+    with ctrl2:
+        stop_clicked = st.button(
+            "■ 停止",
+            disabled=not ss.running, use_container_width=True,
+        )
+    with ctrl3:
+        clear_clicked = st.button(
+            "🧹 清空 Log",
+            disabled=ss.running, use_container_width=True,
+        )
+    with ctrl_status:
+        if ss.running:
+            chip = theme.status_chip("執行中", "running")
+        elif ss.finished_msg:
+            kind = ss.get("finished_kind", "done")
+            chip = theme.status_chip(ss.finished_msg, kind)
+        else:
+            chip = theme.status_chip("準備好", "idle")
+        st.markdown(
+            f'<div style="display:flex;align-items:center;height:38px;padding-left:10px;">{chip}</div>',
+            unsafe_allow_html=True,
+        )
+
+    if clear_clicked:
+        ss.log_lines = []
+        ss.finished_msg = None
+        st.rerun()
+
+    if start_clicked and not ss.running:
+        try:
+            args = build_args()
+        except Exception as e:
+            st.error(f"參數錯誤: {e}")
+            st.stop()
+
+        persist_cv_keywords()
+
+        ss.log_lines = []
+        ss.finished_msg = None
+        ss.last_output_path = None
+        ss.log_queue = queue.Queue()
+        ss.stop_event = threading.Event()
+        ss.log_lines.append(
+            f"關鍵字: {args.keyword}  |  Source: {args.source}  |  "
+            f"Location: {args.location or '(無)'}"
+        )
+        ss.log_lines.append(
+            f"最多頁數: {'全部' if args.max_pages == 0 else args.max_pages}  |  "
+            f"完整 JD: {'是' if args.full_jd else '否'}  |  Delay: {args.delay}s"
+        )
+        if args.at:
+            ss.log_lines.append(f"預定 {args.at:%Y-%m-%d %H:%M:%S} 開始")
+        ss.log_lines.append("-" * 60)
+        ss.running = True
+        ss.worker_result = {}
+        ss.worker = threading.Thread(
+            target=run_scrape,
+            args=(args, ss.log_queue, ss.stop_event, ss.worker_result),
+            daemon=True,
+        )
+        ss.worker.start()
+        st.rerun()
+
+    if stop_clicked and ss.running:
+        ss.stop_event.set()
+        ss.log_lines.append(">>> 停止訊號已發送，正在結束…")
+
+
+# ─────────────────────────────────────────────────────────────
+# Tab 5: 📊 結果 & 日誌
+# ─────────────────────────────────────────────────────────────
+with tab_results:
+    # KPIs from master_stats
+    master_path = (st.session_state.get("s_master") or "").strip()
+    mp = Path(master_path) if master_path else None
+    stats = None
+    if mp and mp.exists() and not ss.running:
+        try:
+            stats = scraper.master_stats(mp)
+        except Exception:
+            stats = None
+
+    c1, c2, c3, c4 = st.columns(4)
+    theme.kpi_card(c1, "工作總數", stats["total"] if stats else 0,
+                   color=theme.PALETTE["accent"], emoji="📊")
+    theme.kpi_card(c2, "已儲存", stats["saved"] if stats else 0,
+                   color=theme.PALETTE["warning"], emoji="⭐")
+    theme.kpi_card(c3, "已申請", stats["applied"] if stats else 0,
+                   color=theme.PALETTE["success"], emoji="✅")
+    theme.kpi_card(c4, "已隱藏", stats["hidden"] if stats else 0,
+                   color=theme.PALETTE["red"], emoji="🚫")
+
+    st.write("")
+    theme.section_label("📜 日誌")
+    log_box = st.empty()
+    drain_log_queue()
+    done = False
+    if ss.log_lines and ss.log_lines[-1] == "__DONE__":
+        ss.log_lines.pop()
+        done = True
+    log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
+
+    # Output download (current run CSV)
+    if not ss.running and ss.last_output_path:
+        p = Path(ss.last_output_path)
+        if p.exists():
+            theme.section_label("📂 今次輸出")
+            theme.glass_card_open()
+            try:
+                data = p.read_bytes()
+                mime = (
+                    "text/csv" if p.suffix.lower() == ".csv"
+                    else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                sz_kb = len(data) / 1024
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:12px;">'
+                    f'<div style="font-family:{theme.FONTS["mono"]};font-size:0.85rem;'
+                    f'color:{theme.PALETTE["subtext"]};flex:1;">📄 <b>{p.name}</b>'
+                    f'<span style="color:{theme.PALETTE["muted"]};margin-left:8px;">{sz_kb:.1f} KB</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                st.download_button(
+                    f"⬇ 下載 {p.name}", data, file_name=p.name, mime=mime,
+                    key="dl_csv",
+                )
+            except Exception as e:
+                st.warning(f"讀取輸出檔失敗: {e}")
+            theme.glass_card_close()
+
+
+# ============================================================
+# Polling loop (runs at top-level regardless of active tab)
+# ============================================================
+
 if ss.running:
     if done or (ss.worker is not None and not ss.worker.is_alive()):
         ss.running = False
-        # Scan log for site-block / error patterns to set status colour
         log_text = "\n".join(ss.log_lines)
         if "HTTP 403" in log_text:
             ss.finished_msg = "已被封鎖 (HTTP 403)"
             ss.finished_kind = "warning"
-            # Append a tip into the log for visibility
             ss.log_lines.append("")
-            ss.log_lines.append("💡 提示：JobsDB 對資料中心 IP 較嚴格。建議改用 cpjobs 或 ctgoodjobs，或本機運行。")
+            ss.log_lines.append(
+                "💡 提示：JobsDB 對資料中心 IP 較嚴格。建議改用 cpjobs 或 ctgoodjobs，或本機運行。"
+            )
         elif "HTTP 4" in log_text or "HTTP 5" in log_text:
             ss.finished_msg = "完成（有錯誤）"
             ss.finished_kind = "warning"
@@ -383,30 +718,3 @@ if ss.running:
     else:
         time.sleep(0.4)
         st.rerun()
-
-# ---- Output download ----
-if not ss.running and ss.last_output_path:
-    p = Path(ss.last_output_path)
-    if p.exists():
-        theme.section_label("📂 今次輸出")
-        theme.glass_card_open()
-        try:
-            data = p.read_bytes()
-            mime = "text/csv" if p.suffix.lower() == ".csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            sz_kb = len(data) / 1024
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:12px;">'
-                f'<div style="font-family:{theme.FONTS["mono"]};font-size:0.85rem;'
-                f'color:{theme.PALETTE["subtext"]};flex:1;">📄 <b>{p.name}</b>'
-                f'<span style="color:{theme.PALETTE["muted"]};margin-left:8px;">{sz_kb:.1f} KB</span></div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            st.download_button(
-                f"⬇ 下載 {p.name}", data, file_name=p.name, mime=mime,
-                use_container_width=False,
-            )
-        except Exception as e:
-            st.warning(f"讀取輸出檔失敗: {e}")
-        theme.glass_card_close()
-
