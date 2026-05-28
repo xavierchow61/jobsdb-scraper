@@ -24,41 +24,33 @@ import scraper
 import theme
 
 
-# Popular HK districts that work well on JobsDB's URL slug filter
-# (build_search_url turns these into in-<slug> path segments).
-JOBSDB_DISTRICTS = [
-    "",  # empty = 全港
-    "Central",
-    "Admiralty",
-    "Sheung Wan",
-    "Wan Chai",
-    "Causeway Bay",
-    "North Point",
-    "Quarry Bay",
-    "Taikoo Shing",
-    "Aberdeen",
-    "Tsim Sha Tsui",
-    "Jordan",
-    "Mong Kok",
-    "Prince Edward",
-    "Hung Hom",
-    "Kowloon Bay",
-    "Kwun Tong",
-    "Lai Chi Kok",
-    "Cheung Sha Wan",
-    "Lai King",
-    "Sha Tin",
-    "Tai Wai",
-    "Tai Po",
-    "Tsuen Wan",
-    "Kwai Chung",
-    "Tsing Yi",
-    "Tseung Kwan O",
-    "Tuen Mun",
-    "Yuen Long",
-    "Tin Shui Wai",
-    "Tung Chung",
-]
+# Hong Kong's 18 official districts (區) — used as JobsDB's location filter.
+# Key  = URL slug value (英文，scraper.build_search_url 會 hyphenate)
+# Value = display label (中文，按港島/九龍/新界分組)
+JOBSDB_DISTRICTS = {
+    "": "全港（不限地區）",
+    # 港島 4 區
+    "Central and Western District": "中西區（港島）",
+    "Wan Chai District":            "灣仔區（港島）",
+    "Eastern District":             "東區（港島）",
+    "Southern District":            "南區（港島）",
+    # 九龍 5 區
+    "Yau Tsim Mong District":       "油尖旺區（九龍）",
+    "Sham Shui Po District":        "深水埗區（九龍）",
+    "Kowloon City District":        "九龍城區（九龍）",
+    "Wong Tai Sin District":        "黃大仙區（九龍）",
+    "Kwun Tong District":           "觀塘區（九龍）",
+    # 新界 9 區
+    "Kwai Tsing District":          "葵青區（新界）",
+    "Tsuen Wan District":           "荃灣區（新界）",
+    "Tuen Mun District":            "屯門區（新界）",
+    "Yuen Long District":           "元朗區（新界）",
+    "Northern District":            "北區（新界）",
+    "Tai Po District":              "大埔區（新界）",
+    "Sha Tin District":             "沙田區（新界）",
+    "Sai Kung District":            "西貢區（新界）",
+    "Islands District":             "離島區（新界）",
+}
 
 
 # ============================================================
@@ -241,11 +233,16 @@ with col_loc:
                      format_func=fmt_district,
                      help="cpjobs 只支援 4 大區")
     else:  # jobsdb
-        if ss.s_location not in JOBSDB_DISTRICTS:
+        jobsdb_keys = list(JOBSDB_DISTRICTS.keys())
+        if ss.s_location not in jobsdb_keys:
             ss.s_location = ""
-        st.selectbox("📍 地區", JOBSDB_DISTRICTS, key="s_location",
-                     format_func=fmt_district,
-                     help="揀常見工作地區（留空 = 全港）")
+        st.selectbox(
+            "📍 地區",
+            jobsdb_keys,
+            key="s_location",
+            format_func=lambda x: JOBSDB_DISTRICTS[x],
+            help="香港 18 區（JobsDB 官方篩選層級）",
+        )
 with col_pg:
     st.number_input(
         "📄 頁數",
