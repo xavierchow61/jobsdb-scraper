@@ -529,9 +529,72 @@ header[data-testid="stHeader"] {{ background: transparent !important; backdrop-f
 </style>"""
 
 
+_LOCALSTORAGE_SYNC_JS = """
+<script>
+// Mirror URL query params ↔ browser localStorage so settings persist
+// across page navigations and refreshes.
+//
+// Why: Streamlit's st.query_params live on the current page's URL only.
+// Clicking a page_link to another page changes the URL path AND wipes
+// the query params. Even though session_state survives the nav, the
+// URL no longer has the params, so a subsequent refresh loses them.
+//
+// This script runs inside an st.components iframe on every page render:
+//   1. If parent URL has query params  → snapshot to localStorage
+//   2. Else if localStorage has params → reload parent with those params
+//
+// After the reload, branch (1) runs, so no infinite loop.
+(function() {
+    const KEY = 'jobradar_settings_v1';
+    try {
+        const parent = window.parent;
+        if (!parent || !parent.location) return;
+        const url = new URL(parent.location.href);
+        const params = url.searchParams;
+        const hasParams = params.toString().length > 0;
+
+        if (hasParams) {
+            // Snapshot current URL params to localStorage
+            const obj = {};
+            params.forEach((v, k) => { obj[k] = v; });
+            parent.localStorage.setItem(KEY, JSON.stringify(obj));
+        } else {
+            // URL is bare — try to restore from localStorage
+            const stored = parent.localStorage.getItem(KEY);
+            if (stored) {
+                const obj = JSON.parse(stored);
+                if (obj && Object.keys(obj).length > 0) {
+                    const usp = new URLSearchParams(obj);
+                    const newSearch = '?' + usp.toString();
+                    // Only reload if it would actually change the URL
+                    if (parent.location.search !== newSearch) {
+                        url.search = newSearch;
+                        parent.location.replace(url.toString());
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Cross-origin or other failure — silently no-op
+        console.warn('JobRadar persistence skipped:', e && e.message);
+    }
+})();
+</script>
+"""
+
+
 def apply():
     """Inject CSS + render the branded sidebar. Call once per page."""
     st.markdown(_build_css(), unsafe_allow_html=True)
+    # localStorage sync — survives page nav AND refresh.
+    # height=0 keeps the iframe invisible. Use components.v1.html (not
+    # st.markdown) because Streamlit strips <script> tags from markdown
+    # for security.
+    try:
+        from streamlit.components.v1 import html as _components_html
+        _components_html(_LOCALSTORAGE_SYNC_JS, height=0)
+    except Exception:
+        pass
 
 
 # ============================================================
