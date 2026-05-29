@@ -418,11 +418,16 @@ with tab_cv:
         with b1:
             if st.button("🔄 重新抽取", help="重新由 CV 文字提取（將覆蓋你的編輯）"):
                 st.session_state.pop("cv_keywords_for", None)
+                st.session_state.pop("cv_keywords_textarea", None)
                 st.rerun()
         with b2:
             if st.button("🧹 清空", key="cv_kw_clear"):
                 st.session_state.cv_keywords = []
-                st.session_state.cv_keywords_textarea = ""
+                # Pop the widget key so it re-initialises with empty value
+                # on rerun. Assigning to it directly here would raise
+                # StreamlitAPIException because the text_area widget
+                # already rendered earlier in this script run.
+                st.session_state.pop("cv_keywords_textarea", None)
                 st.rerun()
     elif cv_path_for_extract and cv_match is None:
         st.warning("`cv_match` 模組未載入，無法抽取關鍵字。")
