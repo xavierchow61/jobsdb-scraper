@@ -20,6 +20,7 @@ from pathlib import Path
 
 import streamlit as st
 
+import auth
 import config as appcfg
 import scraper
 import theme
@@ -113,13 +114,14 @@ def _post_scrape_send_paginated(args, csv_path):
         return
     if not args.telegram_token or not args.telegram_chat_id:
         return
-    sb_url, sb_key = appcfg.supabase_credentials()
-    if not (sb_url and sb_key):
-        print("  [tg-cards] Supabase 未設定，跳過 paginated 推送")
-        return
-    sup = telegram_cards.supabase_client(sb_url, sb_key)
+    # Use the user-attached Supabase client (RLS-aware) so the insert
+    # automatically lands under auth.uid().
+    sup = auth.get_supabase()
     if sup is None:
+        print("  [tg-cards] Supabase 客戶端未設定，跳過 paginated 推送")
         return
+    user = auth.get_user()
+    user_id = user["id"] if user else None
 
     # Read the per-run CSV — these are exactly the jobs scraped this run
     import csv as _csv
@@ -162,9 +164,20 @@ def _post_scrape_send_paginated(args, csv_path):
     if limit > 0:
         rows = rows[:limit]
 
+    # Auto-link Telegram chat_id ↔ Supabase user_id so the bot_listener
+    # can identify the user when Save / Hide / Apply buttons are clicked
+    if user_id and args.telegram_chat_id:
+        try:
+            sup.table("user_telegram").upsert({
+                "user_id": str(user_id),
+                "chat_id": str(args.telegram_chat_id),
+            }).execute()
+        except Exception as e:
+            print(f"  [tg-cards] could not save user→chat mapping: {e}")
+
     batch_id, msg_id = telegram_cards.create_and_send_batch(
         sup, args.telegram_token, args.telegram_chat_id,
-        rows, args.source,
+        rows, args.source, user_id=user_id,
     )
     if msg_id:
         print(f"  [tg-cards] ✓ 已推送 paginated card (batch={batch_id}, jobs={len(rows)})")
@@ -271,17 +284,107 @@ st.set_page_config(
 )
 theme.apply()
 theme.render_sidebar_nav()
+auth.init_session()
+
+
+# ============================================================
+# Auth gate — show login UI when not logged in, halt rest of script
+# ============================================================
+if not auth.is_logged_in():
+    theme.glass_title(
+        "JOB RADAR",
+        emoji="🎯",
+        subtitle="香港求職爬蟲 · 請登入或註冊以使用",
+    )
+    _l, mid, _r = st.columns([1, 2, 1])
+    with mid:
+        tab_login, tab_signup, tab_reset = st.tabs(
+            ["🔓 登入", "✨ 註冊", "🔑 忘記密碼"]
+        )
+
+        with tab_login:
+            with st.form("login_form"):
+                em = st.text_input("Email", placeholder="you@example.com",
+                                   key="login_email")
+                pw = st.text_input("Password", type="password",
+                                   placeholder="密碼", key="login_pw")
+                if st.form_submit_button("登入", type="primary",
+                                          use_container_width=True):
+                    if not em or not pw:
+                        st.error("請填 email 同密碼")
+                    else:
+                        ok, msg = auth.login(em, pw)
+                        if ok:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+        with tab_signup:
+            with st.form("signup_form"):
+                em = st.text_input("Email", placeholder="you@example.com",
+                                   key="signup_email")
+                pw = st.text_input("Password", type="password",
+                                   placeholder="密碼（至少 6 位）",
+                                   key="signup_pw")
+                pw2 = st.text_input("Confirm", type="password",
+                                    placeholder="再輸入密碼",
+                                    key="signup_pw2")
+                if st.form_submit_button("✨ 註冊", type="primary",
+                                          use_container_width=True):
+                    if not em or not pw:
+                        st.error("請填 email 同密碼")
+                    elif pw != pw2:
+                        st.error("兩次密碼唔同")
+                    else:
+                        ok, msg = auth.signup(em, pw)
+                        if ok:
+                            st.success(msg)
+                            if auth.is_logged_in():
+                                st.rerun()
+                        else:
+                            st.error(msg)
+
+        with tab_reset:
+            with st.form("reset_form"):
+                em = st.text_input("Email", placeholder="你註冊嘅 email",
+                                   key="reset_email")
+                if st.form_submit_button("📧 寄重設密碼連結",
+                                          use_container_width=True):
+                    if em:
+                        ok, msg = auth.reset_password(em)
+                        (st.success if ok else st.error)(msg)
+
+    st.stop()
+
+
+# ============================================================
+# Logged-in users only — main app
+# ============================================================
 appcfg.init_settings()
 init_runtime_state()
 ss = st.session_state
+user = auth.get_user()
 
-# Header
-theme.glass_title(
-    "JOB RADAR",
-    emoji="🎯",
-    subtitle="一鍵抓取 JobsDB · CTgoodjobs · cpjobs，配 Telegram 通知 + CV 比對",
-    badge="雲端" if appcfg.IS_CLOUD else "本機",
-)
+# Header with user info + logout
+hc1, hc2 = st.columns([5, 1])
+with hc1:
+    theme.glass_title(
+        "JOB RADAR",
+        emoji="🎯",
+        subtitle="一鍵抓取 JobsDB · CTgoodjobs · cpjobs，配 Telegram 通知 + CV 比對",
+        badge="雲端" if appcfg.IS_CLOUD else "本機",
+    )
+with hc2:
+    st.markdown(
+        f'<div style="margin-top:18px;text-align:right;font-size:0.78rem;'
+        f'color:{theme.PALETTE["muted"]};">'
+        f'👤 {user["email"]}</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("🚪 登出", key="logout_btn", use_container_width=True):
+        auth.logout()
+        st.rerun()
 
 if appcfg.IS_CLOUD:
     st.markdown(

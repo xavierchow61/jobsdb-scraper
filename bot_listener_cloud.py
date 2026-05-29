@@ -11,13 +11,18 @@ Endpoints:
                       (or do it manually via curl, see RENDER_DEPLOY.md)
 
 Required env vars (set in Render dashboard):
-  TELEGRAM_BOT_TOKEN   — BotFather token
-  SUPABASE_URL         — https://<project>.supabase.co
-  SUPABASE_KEY         — anon (public) key
-  WEBHOOK_SECRET       — optional; if set, Telegram must include this in
-                         the X-Telegram-Bot-Api-Secret-Token header
-                         (configured during setWebhook). Stops random
-                         HTTP visitors from impersonating Telegram.
+  TELEGRAM_BOT_TOKEN          — BotFather token
+  SUPABASE_URL                — https://<project>.supabase.co
+  SUPABASE_SERVICE_ROLE_KEY   — service_role key (NOT anon — bot_listener
+                                serves Telegram callbacks, not authenticated
+                                users, so it needs RLS-bypass access)
+  WEBHOOK_SECRET              — optional; if set, Telegram must include
+                                this in the X-Telegram-Bot-Api-Secret-Token
+                                header. Stops random HTTP visitors from
+                                impersonating Telegram.
+
+  Fallback: if SUPABASE_SERVICE_ROLE_KEY is unset, falls back to
+  SUPABASE_KEY for back-compat (you can name your env var either way).
 
 Run locally:
   pip install flask gunicorn supabase
@@ -60,11 +65,33 @@ def get_supabase():
     if _supabase_init_failed:
         return None
     url = os.getenv("SUPABASE_URL", "").strip()
-    key = os.getenv("SUPABASE_KEY", "").strip()
+    # Prefer service_role (bypasses RLS — what a server-side worker needs).
+    # Fall back to SUPABASE_KEY for back-compat with older env setups.
+    key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        or os.getenv("SUPABASE_KEY", "").strip()
+    )
     _supabase = telegram_cards.supabase_client(url, key)
     if _supabase is None:
         _supabase_init_failed = True
     return _supabase
+
+
+def lookup_user_by_chat(supabase, chat_id):
+    """Map a Telegram chat_id → Supabase user_id via user_telegram table."""
+    try:
+        res = (
+            supabase.table("user_telegram")
+            .select("user_id")
+            .eq("chat_id", str(chat_id))
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        return rows[0]["user_id"] if rows else None
+    except Exception as e:
+        print(f"lookup_user_by_chat failed: {e}", file=sys.stderr)
+        return None
 
 
 def get_token():
@@ -163,7 +190,7 @@ def handle_callback(callback):
     if data.startswith("nav:"):
         handle_nav(token, cb_id, chat_id, message_id, data)
     elif data.startswith("act:"):
-        handle_action(token, cb_id, data)
+        handle_action(token, cb_id, callback, data)
     else:
         telegram_cards.answer_callback(token, cb_id)
 
@@ -216,7 +243,7 @@ def handle_nav(token, cb_id, chat_id, message_id, data):
         telegram_cards.answer_callback(token, cb_id, text="編輯失敗")
 
 
-def handle_action(token, cb_id, data):
+def handle_action(token, cb_id, callback, data):
     """data format: act:save:<jd> | act:hide:<jd> | act:apply:<jd>"""
     parts = data.split(":", 2)
     if len(parts) < 3 or not parts[2].strip():
@@ -234,9 +261,20 @@ def handle_action(token, cb_id, data):
         telegram_cards.answer_callback(token, cb_id, text="Supabase 未設定")
         return
 
+    # Map Telegram chat_id → Supabase user_id (RLS-aware insert)
+    chat_id = ((callback.get("message") or {}).get("chat") or {}).get("id")
+    user_id = lookup_user_by_chat(sup, chat_id) if chat_id else None
+    if user_id is None:
+        telegram_cards.answer_callback(
+            token, cb_id,
+            text="未連結 Telegram。請去 Streamlit app 跑一次 scrape 自動連結。",
+        )
+        return
+
     now_iso = datetime.now(timezone.utc).isoformat()
     try:
         sup.table("job_actions").upsert({
+            "user_id": user_id,
             "jd_number": jd_number,
             column: now_iso,
             "updated_at": now_iso,

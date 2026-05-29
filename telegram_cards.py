@@ -47,8 +47,11 @@ def supabase_client(url, anon_key):
         return None
 
 
-def create_batch(supabase, chat_id, jobs):
-    """Insert a new batch into telegram_batches. Returns batch_id."""
+def create_batch(supabase, chat_id, jobs, user_id=None):
+    """Insert a new batch into telegram_batches. Returns batch_id.
+
+    user_id is required when RLS is enabled with per-user policies.
+    """
     batch_id = uuid.uuid4().hex[:8]
     payload = {
         "batch_id": batch_id,
@@ -56,6 +59,8 @@ def create_batch(supabase, chat_id, jobs):
         "jobs": jobs,
         "current_idx": 0,
     }
+    if user_id:
+        payload["user_id"] = str(user_id)
     supabase.table("telegram_batches").insert(payload).execute()
     return batch_id
 
@@ -204,7 +209,7 @@ def answer_callback(token, callback_query_id, text=""):
 # Sender entry point — used from streamlit_app.py
 # ============================================================
 
-def create_and_send_batch(supabase, token, chat_id, jobs, source):
+def create_and_send_batch(supabase, token, chat_id, jobs, source, user_id=None):
     """Create batch in Supabase and send the first paginated card.
 
     Returns (batch_id, message_id) or (None, None) on failure.
@@ -217,7 +222,7 @@ def create_and_send_batch(supabase, token, chat_id, jobs, source):
         if not j.get("Source"):
             j["Source"] = source
     try:
-        batch_id = create_batch(supabase, chat_id, jobs)
+        batch_id = create_batch(supabase, chat_id, jobs, user_id=user_id)
     except Exception as e:
         print(f"  [tg-cards] create_batch failed: {e}")
         return None, None
