@@ -609,10 +609,12 @@ with tab_tg:
 
     if appcfg.IS_CLOUD:
         if src == "secrets":
-            masked_chat = chat[:3] + "…" + chat[-2:] if len(chat) > 5 else "…"
+            # Don't show Chat ID — it's the app owner's, not the logged-in
+            # user's, and exposing even a masked version to other users
+            # would leak the owner's Telegram identity.
             st.success(
-                f"✓ 已透過 Streamlit Cloud Secrets 設定 · "
-                f"Chat ID `{masked_chat}` · Token 已隱藏"
+                "✓ Telegram 已由管理員透過 Streamlit Cloud Secrets 設定 · "
+                "Token 與 Chat ID 已隱藏"
             )
         else:
             st.error("✗ 雲端模式下尚未設定 Telegram Secrets")
@@ -872,12 +874,11 @@ with tab_results:
         done = True
     log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
 
-    # Output download (current run CSV)
+    # Output download (current run CSV) — just a single download button
     if not ss.running and ss.last_output_path:
         p = Path(ss.last_output_path)
         if p.exists():
             theme.section_label("📂 今次輸出")
-            theme.glass_card_open()
             try:
                 data = p.read_bytes()
                 mime = (
@@ -885,21 +886,13 @@ with tab_results:
                     else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
                 sz_kb = len(data) / 1024
-                st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:12px;">'
-                    f'<div style="font-family:{theme.FONTS["mono"]};font-size:0.85rem;'
-                    f'color:{theme.PALETTE["subtext"]};flex:1;">📄 <b>{p.name}</b>'
-                    f'<span style="color:{theme.PALETTE["muted"]};margin-left:8px;">{sz_kb:.1f} KB</span></div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
                 st.download_button(
-                    f"⬇ 下載 {p.name}", data, file_name=p.name, mime=mime,
+                    f"⬇ 下載 {p.name}  ·  {sz_kb:.1f} KB",
+                    data, file_name=p.name, mime=mime,
                     key="dl_csv",
                 )
             except Exception as e:
                 st.warning(f"讀取輸出檔失敗: {e}")
-            theme.glass_card_close()
 
 
 # ============================================================
