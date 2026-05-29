@@ -447,7 +447,15 @@ with tab_cv:
     uploaded_cv = st.file_uploader(
         "上傳 CV（PDF 或 TXT）", type=["pdf", "txt"], key="cv_uploader",
     )
-    if uploaded_cv is not None:
+    # CRITICAL: only save the tempfile when this is a NEW upload (different
+    # filename from what we already stored). Otherwise every rerun would
+    # re-save a fresh tempfile + clear cv_keywords_for, which would force
+    # an auto-re-extract — masking any edits or the Clear button.
+    if uploaded_cv is not None and (
+        st.session_state.get("uploaded_cv_name") != uploaded_cv.name
+        or not st.session_state.get("uploaded_cv_path")
+        or not Path(st.session_state.get("uploaded_cv_path") or "").exists()
+    ):
         suffix = Path(uploaded_cv.name).suffix or ".pdf"
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
         tmp.write(uploaded_cv.getvalue())
