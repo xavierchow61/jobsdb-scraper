@@ -348,7 +348,7 @@ if not auth.is_logged_in():
                     if not em or not pw:
                         st.error("請填 email 同密碼")
                     elif pw != pw2:
-                        st.error("兩次密碼唔同")
+                        st.error("兩次密碼不同")
                     else:
                         ok, msg = auth.signup(em, pw)
                         if ok:
@@ -443,6 +443,15 @@ TAB_OPTIONS = [
 ]
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = TAB_OPTIONS[0]
+
+# Apply any deferred tab switch BEFORE the radio widget is created.
+# Streamlit forbids assigning to a widget's session_state key AFTER the
+# widget has been instantiated in the current script run, so we use a
+# "_pending_tab" handoff: handlers set it, the next rerun applies it here.
+if "_pending_tab" in st.session_state:
+    pending = st.session_state.pop("_pending_tab")
+    if pending in TAB_OPTIONS:
+        st.session_state.active_tab = pending
 
 st.radio(
     "Sub-page",
@@ -749,8 +758,8 @@ if active == "📨 Telegram 通知":
     if has_setup:
         with st.expander("⚙ 進階：註冊 webhook（首次設好 bot 之後做一次）"):
             st.caption(
-                "你嘅 bot 需要 register 一個 webhook URL，"
-                "Telegram 先會將翻頁 / Save / Hide 按鈕嘅 callback 寄去個 bot_listener。"
+                "你的 bot 需要註冊一個 webhook URL，"
+                "Telegram 才會將翻頁／Save／Hide 按鈕的 callback 傳送至 bot_listener。"
             )
             bot_listener_url = st.text_input(
                 "Bot Listener URL",
@@ -923,8 +932,11 @@ if active == "🔍 搜尋 & 開始":
             daemon=True,
         )
         ss.worker.start()
-        # Auto-jump to 結果 tab so user sees the log immediately
-        ss.active_tab = "📊 結果 & 日誌"
+        # Auto-jump to 結果 tab so user sees the log immediately.
+        # Use the deferred handoff (NOT direct ss.active_tab = ...) because
+        # the radio widget already rendered earlier in this script run, and
+        # Streamlit forbids assigning to widget keys post-instantiation.
+        ss._pending_tab = "📊 結果 & 日誌"
         st.rerun()
 
     if stop_clicked and ss.running:
