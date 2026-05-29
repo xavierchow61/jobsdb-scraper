@@ -427,19 +427,37 @@ if ss.running:
 # 5 sub-tabs
 # ============================================================
 
-tab_cv, tab_score, tab_tg, tab_search, tab_results = st.tabs([
+# ─────────────────────────────────────────────────────────────
+# Sub-page navigation — st.radio styled as tabs.
+# Why not st.tabs? Streamlit's native tabs are purely client-side and
+# CAN'T be programmatically switched. We need to jump to 結果 after
+# clicking Start, so we use st.radio with a session-state key and just
+# style it to look tab-like.
+# ─────────────────────────────────────────────────────────────
+TAB_OPTIONS = [
     "📄 上傳 CV",
     "🎯 比對分數",
     "📨 Telegram 通知",
     "🔍 搜尋 & 開始",
     "📊 結果 & 日誌",
-])
+]
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = TAB_OPTIONS[0]
+
+st.radio(
+    "Sub-page",
+    TAB_OPTIONS,
+    key="active_tab",
+    horizontal=True,
+    label_visibility="collapsed",
+)
+active = st.session_state.active_tab
 
 
 # ─────────────────────────────────────────────────────────────
 # Tab 1: 上傳 CV + 關鍵字編輯
 # ─────────────────────────────────────────────────────────────
-with tab_cv:
+if active == "📄 上傳 CV":
     theme.section_label("📄 上傳 CV")
 
     if appcfg.IS_CLOUD:
@@ -517,10 +535,16 @@ with tab_cv:
         )
         st.caption("自動由 CV 抽取，以逗號分隔。可移除不適合的，或新增自訂關鍵字。")
 
+        # Version counter trick: bumping `cv_kw_ver` gives the text_area
+        # a fresh `key=`, which forces Streamlit to discard the previous
+        # widget state (including any cached browser value). This is the
+        # bulletproof way to truly clear / refill the textarea — popping
+        # the key alone is unreliable across some Streamlit versions.
+        kw_ver = st.session_state.get("cv_kw_ver", 0)
         edited_text = st.text_area(
             "關鍵字（以逗號分隔）",
             value=", ".join(kw_list),
-            key="cv_keywords_textarea",
+            key=f"cv_keywords_textarea_v{kw_ver}",
             height=140,
             label_visibility="collapsed",
         )
@@ -542,16 +566,12 @@ with tab_cv:
         with b1:
             if st.button("🔄 重新抽取", help="重新由 CV 文字提取（將覆蓋你的編輯）"):
                 st.session_state.pop("cv_keywords_for", None)
-                st.session_state.pop("cv_keywords_textarea", None)
+                st.session_state.cv_kw_ver = kw_ver + 1
                 st.rerun()
         with b2:
             if st.button("🧹 清空", key="cv_kw_clear"):
                 st.session_state.cv_keywords = []
-                # Pop the widget key so it re-initialises with empty value
-                # on rerun. Assigning to it directly here would raise
-                # StreamlitAPIException because the text_area widget
-                # already rendered earlier in this script run.
-                st.session_state.pop("cv_keywords_textarea", None)
+                st.session_state.cv_kw_ver = kw_ver + 1
                 st.rerun()
     elif cv_path_for_extract and cv_match is None:
         st.warning("`cv_match` 模組未載入，無法抽取關鍵字。")
@@ -562,7 +582,7 @@ with tab_cv:
 # ─────────────────────────────────────────────────────────────
 # Tab 2: 比對分數
 # ─────────────────────────────────────────────────────────────
-with tab_score:
+if active == "🎯 比對分數":
     theme.section_label("🎯 比對分數下限")
 
     st.markdown(
@@ -605,7 +625,7 @@ with tab_score:
 # ─────────────────────────────────────────────────────────────
 # Tab 3: 📨 Telegram 通知 — per-user bot credentials
 # ─────────────────────────────────────────────────────────────
-with tab_tg:
+if active == "📨 Telegram 通知":
     theme.section_label("📨 你自己的 Telegram BOT 設定")
 
     user_settings = auth.get_user_settings()
@@ -764,7 +784,7 @@ with tab_tg:
 # ─────────────────────────────────────────────────────────────
 # Tab 4: 🔍 搜尋 & 開始
 # ─────────────────────────────────────────────────────────────
-with tab_search:
+if active == "🔍 搜尋 & 開始":
     theme.section_label("🔍 搜尋條件")
 
     # Filter pill
@@ -903,6 +923,8 @@ with tab_search:
             daemon=True,
         )
         ss.worker.start()
+        # Auto-jump to 結果 tab so user sees the log immediately
+        ss.active_tab = "📊 結果 & 日誌"
         st.rerun()
 
     if stop_clicked and ss.running:
@@ -913,7 +935,7 @@ with tab_search:
 # ─────────────────────────────────────────────────────────────
 # Tab 5: 📊 結果 & 日誌
 # ─────────────────────────────────────────────────────────────
-with tab_results:
+if active == "📊 結果 & 日誌":
     # KPIs from master_stats
     master_path = (st.session_state.get("s_master") or "").strip()
     mp = Path(master_path) if master_path else None
@@ -944,23 +966,103 @@ with tab_results:
         done = True
     log_box.code("\n".join(ss.log_lines[-500:]) or "(尚未開始)", language="log")
 
-    # Output download (current run CSV) — just a single download button
+    # Output (current run CSV) — show table + CSV/Excel download
     if not ss.running and ss.last_output_path:
         p = Path(ss.last_output_path)
         if p.exists():
             theme.section_label("📂 今次輸出")
             try:
-                data = p.read_bytes()
-                mime = (
-                    "text/csv" if p.suffix.lower() == ".csv"
-                    else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                sz_kb = len(data) / 1024
-                st.download_button(
-                    f"⬇ 下載 {p.name}  ·  {sz_kb:.1f} KB",
-                    data, file_name=p.name, mime=mime,
-                    key="dl_csv",
-                )
+                import csv as _csv
+                with open(p, encoding="utf-8-sig", newline="") as fh:
+                    rows = list(_csv.DictReader(fh))
+                # Apply match threshold filter — only show jobs that passed
+                threshold = float(st.session_state.get("s_match_threshold", 0) or 0)
+                if threshold > 0:
+                    rows = [
+                        r for r in rows
+                        if float(r.get("Match Score") or 0) >= threshold
+                    ]
+
+                if rows:
+                    # Show summary chip + table
+                    st.caption(
+                        f"今次抓到 **{len(rows)}** 條工作"
+                        + (f"（match score ≥ {threshold:.0f}）" if threshold else "")
+                    )
+
+                    # Display key columns only (otherwise too wide)
+                    display_cols = [
+                        c for c in (
+                            "Match Score", "Job Title", "Company",
+                            "Salary", "Location", "Posted Date",
+                            "Work Type", "URL",
+                        )
+                        if c in rows[0]
+                    ]
+                    table_data = [
+                        {k: r.get(k, "") for k in display_cols}
+                        for r in rows
+                    ]
+                    st.dataframe(
+                        table_data,
+                        use_container_width=True,
+                        height=min(400, 40 + len(table_data) * 35),
+                        column_config={
+                            "URL": st.column_config.LinkColumn(
+                                "URL", width="small", display_text="🔗",
+                            ),
+                            "Match Score": st.column_config.NumberColumn(
+                                "Match", format="%d", width="small",
+                            ),
+                        },
+                    )
+                else:
+                    st.info("無工作通過 match score 下限。")
+
+                # Downloads row — CSV + Excel
+                csv_data = p.read_bytes()
+                csv_sz_kb = len(csv_data) / 1024
+
+                # Convert to xlsx on-the-fly for the Excel download
+                try:
+                    import io as _io
+                    import openpyxl
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
+                    ws.title = "Jobs"
+                    if rows:
+                        headers = list(rows[0].keys())
+                        ws.append(headers)
+                        for r in rows:
+                            ws.append([r.get(h, "") for h in headers])
+                    buf = _io.BytesIO()
+                    wb.save(buf)
+                    xlsx_bytes = buf.getvalue()
+                    xlsx_name = p.stem + ".xlsx"
+                    xlsx_sz_kb = len(xlsx_bytes) / 1024
+                except Exception:
+                    xlsx_bytes = None
+                    xlsx_name = ""
+                    xlsx_sz_kb = 0
+
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    st.download_button(
+                        f"⬇ CSV  ·  {csv_sz_kb:.1f} KB",
+                        csv_data, file_name=p.name, mime="text/csv",
+                        key="dl_csv", use_container_width=True,
+                    )
+                with dc2:
+                    if xlsx_bytes:
+                        st.download_button(
+                            f"📊 Excel  ·  {xlsx_sz_kb:.1f} KB",
+                            xlsx_bytes,
+                            file_name=xlsx_name,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="dl_xlsx", use_container_width=True,
+                        )
+                    else:
+                        st.caption("⚠ Excel 轉換失敗")
             except Exception as e:
                 st.warning(f"讀取輸出檔失敗: {e}")
 

@@ -1511,6 +1511,19 @@ def cp_format_salary(p):
     show = p.get("showsalary")
     if show == "N":
         return ""
+    # cpjobs sometimes returns salaries as strings ("30000") rather than ints,
+    # which crashes f"{x:,}" with "Cannot specify ',' with 's'". Coerce safely.
+    def _to_int(v):
+        if v is None or v == "":
+            return None
+        if isinstance(v, (int, float)):
+            return int(v)
+        try:
+            return int(str(v).replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+    minp = _to_int(minp)
+    maxp = _to_int(maxp)
     if not minp and not maxp:
         return ""
     if minp and maxp:
