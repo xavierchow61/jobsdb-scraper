@@ -82,6 +82,21 @@ def supabase_credentials():
     return url.strip(), key.strip()
 
 
+def supabase_service_credentials():
+    """Return (url, service_role_key). Used for server-side writes that
+    need to bypass RLS — e.g. worker thread inserting telegram_batches.
+    The row's user_id is set explicitly so per-user data isolation is
+    preserved despite bypassing the RLS check.
+    """
+    url = _secret("supabase", "url") or os.getenv("SUPABASE_URL", "")
+    key = (
+        _secret("supabase", "service_role_key")
+        or _secret("supabase", "service_role")
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    )
+    return url.strip(), key.strip()
+
+
 # Telegram token helpers — Cloud routes through st.secrets, never user input.
 def telegram_credentials():
     """Return (token, chat_id, source) — source ∈ {'secrets', 'config', 'none'}."""

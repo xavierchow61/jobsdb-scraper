@@ -114,12 +114,22 @@ def _post_scrape_send_paginated(args, csv_path):
         return
     if not args.telegram_token or not args.telegram_chat_id:
         return
-    # Use the user-attached Supabase client (RLS-aware) so the insert
-    # automatically lands under auth.uid().
-    sup = auth.get_supabase()
-    if sup is None:
-        print("  [tg-cards] Supabase 客戶端未設定，跳過 paginated 推送")
+
+    # Use SERVICE_ROLE client for the post-scrape write.
+    # Reasoning: this function runs in a worker thread where the user's
+    # auth context (auth.set_session token) doesn't reliably propagate
+    # to supabase-py's PostgREST calls. RLS would then see auth.uid()
+    # = NULL and reject the insert. We explicitly tag the row with
+    # user_id so per-user isolation is preserved by data convention
+    # even though RLS is bypassed.
+    sb_url, sb_service = appcfg.supabase_service_credentials()
+    if not (sb_url and sb_service):
+        print("  [tg-cards] Supabase service_role 未設定，跳過 paginated 推送")
         return
+    sup = telegram_cards.supabase_client(sb_url, sb_service)
+    if sup is None:
+        return
+
     user = auth.get_user()
     user_id = user["id"] if user else None
 
