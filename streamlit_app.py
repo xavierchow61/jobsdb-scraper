@@ -35,6 +35,11 @@ try:
 except ImportError:
     telegram_cards = None
 
+try:
+    import master_sync
+except ImportError:
+    master_sync = None
+
 
 # JobsDB hidden — Cloud datacenter IPs get HTTP 403 from hk.jobsdb.com.
 # CLI / local can still use `--source jobsdb`.
@@ -195,6 +200,54 @@ def _post_scrape_send_paginated(args, csv_path):
         print(f"  [tg-cards] ✗ paginated 推送失敗")
 
 
+def _supabase_service_client():
+    """Get a service-role Supabase client (bypasses RLS, server-side)."""
+    if telegram_cards is None:
+        return None
+    sb_url, sb_service = appcfg.supabase_service_credentials()
+    if not (sb_url and sb_service):
+        return None
+    return telegram_cards.supabase_client(sb_url, sb_service)
+
+
+def _pre_populate_master(args):
+    """Rebuild /tmp/jobs_master.xlsx from Supabase before scrape starts.
+
+    Without this, Streamlit Cloud's ephemeral filesystem means every
+    container restart loses the accumulated master xlsx. Pulling from
+    Supabase at scrape start makes the dedup logic in scraper.MasterDB
+    see all historic jobs.
+    """
+    if master_sync is None or not getattr(args, "user_id", None) or not args.master:
+        return
+    sup = _supabase_service_client()
+    if not sup:
+        return
+    try:
+        n = master_sync.download_master_to_xlsx(sup, args.user_id, args.master)
+        if n:
+            print(f"  [master-sync] 從 Supabase 預載 {n} 條既有工作")
+    except Exception as e:
+        print(f"  [master-sync] 預載失敗: {e}")
+
+
+def _post_sync_master(args):
+    """After scrape, push new rows from /tmp/jobs_master.xlsx to Supabase."""
+    if master_sync is None or not getattr(args, "user_id", None) or not args.master:
+        return
+    sup = _supabase_service_client()
+    if not sup:
+        return
+    try:
+        added, updated = master_sync.sync_xlsx_to_supabase(
+            sup, args.user_id, args.master
+        )
+        if added or updated:
+            print(f"  [master-sync] 已同步 {added} 條新 + {updated} 條更新工作至 Supabase")
+    except Exception as e:
+        print(f"  [master-sync] 同步失敗: {e}")
+
+
 def run_scrape(args, q, stop_event, result):
     old_stdout = sys.stdout
     sys.stdout = StreamPipe(q)
@@ -209,9 +262,16 @@ def run_scrape(args, q, stop_event, result):
             if stop_event.is_set():
                 print("已取消（尚未開始爬取）")
                 return
+
+        # PRE-SCRAPE: rebuild local xlsx from Supabase so dedup sees history
+        _pre_populate_master(args)
+
         path = scraper.scrape(args, stop_event=stop_event)
         if path:
             result["output_path"] = str(path)
+
+        # POST-SCRAPE: push new rows (including just-scraped) up to Supabase
+        _post_sync_master(args)
 
         # Re-enable for the paginated send + actually send
         if wanted_tg:
@@ -440,6 +500,7 @@ TAB_OPTIONS = [
     "📨 Telegram 通知",
     "🔍 搜尋 & 開始",
     "📊 結果 & 日誌",
+    "📌 我的工作",
 ]
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = TAB_OPTIONS[0]
@@ -906,6 +967,11 @@ if active == "🔍 搜尋 & 開始":
             st.error(f"參數錯誤: {e}")
             st.stop()
 
+        # Attach the logged-in user's id so the worker thread can sync
+        # /tmp/jobs_master.xlsx ↔ Supabase master_jobs under the right row.
+        _u = auth.get_user()
+        args.user_id = _u["id"] if _u else None
+
         persist_cv_keywords()
 
         ss.log_lines = []
@@ -1077,6 +1143,133 @@ if active == "📊 結果 & 日誌":
                         st.caption("⚠ Excel 轉換失敗")
             except Exception as e:
                 st.warning(f"讀取輸出檔失敗: {e}")
+
+
+# ─────────────────────────────────────────────────────────────
+# Tab 6: 📌 我的工作 — Saved / Applied / Hidden views
+# ─────────────────────────────────────────────────────────────
+if active == "📌 我的工作":
+    sup_user = auth.get_supabase()
+    user_now = auth.get_user()
+    if not sup_user or not user_now:
+        st.warning("請先登入。")
+    else:
+        uid = user_now["id"]
+        # Fetch master_jobs + job_actions in parallel-ish (two queries)
+        try:
+            mj_res = (
+                sup_user.table("master_jobs")
+                .select("*")
+                .eq("user_id", uid)
+                .order("scraped_at", desc=True)
+                .limit(2000)
+                .execute()
+            )
+            master_rows = mj_res.data or []
+        except Exception as e:
+            st.warning(f"讀取主資料庫失敗：{e}")
+            master_rows = []
+        try:
+            ja_res = (
+                sup_user.table("job_actions")
+                .select("*")
+                .eq("user_id", uid)
+                .execute()
+            )
+            action_rows = ja_res.data or []
+        except Exception as e:
+            st.warning(f"讀取狀態失敗：{e}")
+            action_rows = []
+
+        actions_by_jd = {a["jd_number"]: a for a in action_rows}
+        saved_jobs   = []
+        applied_jobs = []
+        hidden_jobs  = []
+        for m in master_rows:
+            jd = m.get("jd_number")
+            a = actions_by_jd.get(jd, {})
+            row = {**m, "_saved": a.get("saved"),
+                       "_applied": a.get("applied"),
+                       "_hidden": a.get("hidden")}
+            if a.get("saved"):
+                saved_jobs.append(row)
+            if a.get("applied"):
+                applied_jobs.append(row)
+            if a.get("hidden"):
+                hidden_jobs.append(row)
+
+        c1, c2, c3, c4 = st.columns(4)
+        theme.kpi_card(c1, "主資料庫", len(master_rows),
+                       color=theme.PALETTE["accent"], emoji="📊")
+        theme.kpi_card(c2, "已儲存", len(saved_jobs),
+                       color=theme.PALETTE["warning"], emoji="⭐")
+        theme.kpi_card(c3, "已申請", len(applied_jobs),
+                       color=theme.PALETTE["success"], emoji="✅")
+        theme.kpi_card(c4, "已隱藏", len(hidden_jobs),
+                       color=theme.PALETTE["red"], emoji="🚫")
+
+        st.write("")
+
+        # Download full master
+        if master_rows and master_sync is not None:
+            try:
+                xlsx_bytes = master_sync.build_xlsx_bytes(
+                    _supabase_service_client(), uid
+                )
+                if xlsx_bytes:
+                    from datetime import datetime as _dt
+                    fn = f"jobs_master_{_dt.now():%Y%m%d}.xlsx"
+                    st.download_button(
+                        f"📥 下載完整 Master xlsx · {len(xlsx_bytes)/1024:.1f} KB"
+                        f"（{len(master_rows)} 條）",
+                        xlsx_bytes, file_name=fn,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="dl_master_xlsx",
+                    )
+            except Exception as e:
+                st.caption(f"⚠ Master xlsx 建立失敗：{e}")
+
+        st.divider()
+
+        view_saved, view_applied, view_hidden = st.tabs([
+            f"⭐ 已儲存（{len(saved_jobs)}）",
+            f"✅ 已申請（{len(applied_jobs)}）",
+            f"🚫 已隱藏（{len(hidden_jobs)}）",
+        ])
+
+        def render_job_list(rows, status_field, status_label, empty_msg):
+            if not rows:
+                st.caption(empty_msg)
+                return
+            display = []
+            for r in rows:
+                display.append({
+                    status_label: r.get(status_field, "")[:10] if r.get(status_field) else "",
+                    "Job Title": r.get("job_title") or "",
+                    "Company":   r.get("company") or "",
+                    "Salary":    r.get("salary") or "",
+                    "Location":  r.get("location") or "",
+                    "Match":     int(r["match_score"]) if r.get("match_score") else None,
+                    "URL":       r.get("url") or "",
+                })
+            st.dataframe(
+                display, use_container_width=True,
+                height=min(500, 40 + len(display) * 35),
+                column_config={
+                    "URL": st.column_config.LinkColumn("", width="small", display_text="🔗"),
+                    "Match": st.column_config.NumberColumn(format="%d", width="small"),
+                },
+            )
+
+        with view_saved:
+            render_job_list(saved_jobs, "_saved", "Saved",
+                            "尚未有已儲存的工作。喺 Telegram 點 ⭐ Save 就會記錄到呢度。")
+        with view_applied:
+            render_job_list(applied_jobs, "_applied", "Applied",
+                            "尚未有已申請的工作。喺 Telegram 點 ✅ Applied 就會記錄到呢度。")
+        with view_hidden:
+            render_job_list(hidden_jobs, "_hidden", "Hidden",
+                            "尚未有已隱藏的工作。喺 Telegram 點 🚫 Hide 就會記錄到呢度。")
 
 
 # ============================================================
