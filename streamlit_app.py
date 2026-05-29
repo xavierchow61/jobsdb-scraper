@@ -693,12 +693,20 @@ with tab_tg:
 
     st.divider()
 
-    # Push options
+    # Auto-enable s_tg_enabled the FIRST time the user has a valid setup,
+    # but don't override later (so user can manually disable). The flag
+    # `_tg_enabled_seeded` records that we've done the one-shot seed.
+    if has_setup and not st.session_state.get("_tg_enabled_seeded"):
+        st.session_state.s_tg_enabled = True
+        st.session_state._tg_enabled_seeded = True
+
+    # Push options — note: when `key` is already in session_state (seeded
+    # by init_settings or by the line above), Streamlit forbids passing
+    # `value=` to the widget — would raise StreamlitAPIException.
     st.checkbox(
         "啟用 Telegram 推送（每次 scrape 自動推 paginated card）",
         key="s_tg_enabled",
         disabled=not has_setup,
-        value=has_setup,
         help="設好 bot 之後預設啟用。" if has_setup else "請先設定 bot。",
     )
 
