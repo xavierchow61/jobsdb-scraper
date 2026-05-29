@@ -94,6 +94,36 @@ def lookup_user_by_chat(supabase, chat_id):
         return None
 
 
+def get_user_token(supabase, user_id):
+    """Fetch user's own Telegram bot token from user_settings."""
+    try:
+        res = (
+            supabase.table("user_settings")
+            .select("telegram_token")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        return (rows[0].get("telegram_token") or "").strip() if rows else ""
+    except Exception as e:
+        print(f"get_user_token failed: {e}", file=sys.stderr)
+        return ""
+
+
+def resolve_user_and_token(supabase, chat_id):
+    """For a Telegram chat_id, return (user_id, user_token) or (None, '').
+
+    Falls back to the admin TELEGRAM_BOT_TOKEN env if user has no token.
+    """
+    user_id = lookup_user_by_chat(supabase, chat_id) if chat_id else None
+    token = get_user_token(supabase, user_id) if user_id else ""
+    if not token:
+        # Fallback to admin/global bot token (legacy / single-user setups)
+        token = get_token()
+    return user_id, token
+
+
 def get_token():
     return os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 
@@ -182,15 +212,25 @@ def handle_callback(callback):
     msg = callback.get("message") or {}
     chat_id = (msg.get("chat") or {}).get("id")
     message_id = msg.get("message_id")
-    token = get_token()
 
+    sup = get_supabase()
+    if sup is None:
+        # No Supabase → can only respond with admin token if set
+        admin_token = get_token()
+        if admin_token:
+            telegram_cards.answer_callback(admin_token, cb_id, text="Supabase 未設定")
+        return
+
+    # Resolve which user's bot this callback belongs to
+    user_id, token = resolve_user_and_token(sup, chat_id)
     if not token:
+        # No matching token — can't respond
         return
 
     if data.startswith("nav:"):
         handle_nav(token, cb_id, chat_id, message_id, data)
     elif data.startswith("act:"):
-        handle_action(token, cb_id, callback, data)
+        handle_action(token, cb_id, callback, data, user_id=user_id)
     else:
         telegram_cards.answer_callback(token, cb_id)
 
@@ -243,7 +283,7 @@ def handle_nav(token, cb_id, chat_id, message_id, data):
         telegram_cards.answer_callback(token, cb_id, text="編輯失敗")
 
 
-def handle_action(token, cb_id, callback, data):
+def handle_action(token, cb_id, callback, data, user_id=None):
     """data format: act:save:<jd> | act:hide:<jd> | act:apply:<jd>"""
     parts = data.split(":", 2)
     if len(parts) < 3 or not parts[2].strip():
@@ -261,9 +301,6 @@ def handle_action(token, cb_id, callback, data):
         telegram_cards.answer_callback(token, cb_id, text="Supabase 未設定")
         return
 
-    # Map Telegram chat_id → Supabase user_id (RLS-aware insert)
-    chat_id = ((callback.get("message") or {}).get("chat") or {}).get("id")
-    user_id = lookup_user_by_chat(sup, chat_id) if chat_id else None
     if user_id is None:
         telegram_cards.answer_callback(
             token, cb_id,

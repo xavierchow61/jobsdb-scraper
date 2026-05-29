@@ -195,3 +195,53 @@ def reset_password(email):
         return True, "✅ 重設密碼連結已送到你的 email"
     except Exception as e:
         return False, f"失敗：{e}"
+
+
+# ============================================================
+# Per-user settings (telegram credentials, etc.)
+# ============================================================
+# Stored in Supabase user_settings table, RLS-protected so each user
+# only sees their own row.
+
+def get_user_settings():
+    """Return current user's settings dict, or {} if none / not logged in."""
+    user = get_user()
+    if not user:
+        return {}
+    sb = get_supabase()
+    if sb is None:
+        return {}
+    try:
+        res = (
+            sb.table("user_settings")
+            .select("*")
+            .eq("user_id", user["id"])
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        return rows[0] if rows else {}
+    except Exception as e:
+        print(f"  [auth] get_user_settings failed: {e}")
+        return {}
+
+
+def save_user_settings(**fields):
+    """Upsert current user's settings. Returns (ok, message)."""
+    from datetime import datetime, timezone
+    user = get_user()
+    if not user:
+        return False, "未登入"
+    sb = get_supabase()
+    if sb is None:
+        return False, "Supabase 未設定"
+    payload = {
+        "user_id": user["id"],
+        **fields,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        sb.table("user_settings").upsert(payload).execute()
+        return True, "✓ 已儲存"
+    except Exception as e:
+        return False, f"儲存失敗：{e}"

@@ -44,16 +44,30 @@ create table if not exists user_telegram (
 
 
 -- ============================================================
+-- 3b. Per-user 設定（自己嘅 Telegram bot token + chat_id）
+-- ============================================================
+create table if not exists user_settings (
+  user_id          uuid primary key references auth.users on delete cascade,
+  telegram_token   text,
+  telegram_chat_id text,
+  match_threshold  numeric default 0,
+  updated_at       timestamptz default now()
+);
+
+
+-- ============================================================
 -- 4. 重啟 RLS 並建立 policies
 -- ============================================================
 alter table telegram_batches enable row level security;
 alter table job_actions      enable row level security;
 alter table user_telegram    enable row level security;
+alter table user_settings    enable row level security;
 
 -- 之前可能 disable 過 → 先 drop 舊 policy
 drop policy if exists "users_own_batches"      on telegram_batches;
 drop policy if exists "users_own_actions"      on job_actions;
 drop policy if exists "users_own_telegram_map" on user_telegram;
+drop policy if exists "users_own_settings"     on user_settings;
 drop policy if exists "anon_insert_batches"    on telegram_batches;
 drop policy if exists "anon_select_batches"    on telegram_batches;
 drop policy if exists "anon_update_batches"    on telegram_batches;
@@ -73,6 +87,11 @@ create policy "users_own_actions" on job_actions
   with check (auth.uid() = user_id);
 
 create policy "users_own_telegram_map" on user_telegram
+  for all to authenticated
+  using      (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "users_own_settings" on user_settings
   for all to authenticated
   using      (auth.uid() = user_id)
   with check (auth.uid() = user_id);

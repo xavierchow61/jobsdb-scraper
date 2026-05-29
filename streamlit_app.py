@@ -266,7 +266,10 @@ def build_args():
     a.csv = True
     a.master = (s.get("s_master") or "").strip() if s.get("s_master_enabled") else ""
 
-    tok, chat, _src = appcfg.telegram_credentials()
+    # Per-user Telegram credentials (from Supabase user_settings)
+    user_settings = auth.get_user_settings()
+    tok = (user_settings.get("telegram_token") or "").strip()
+    chat = (user_settings.get("telegram_chat_id") or "").strip()
     a.telegram_enabled = bool(s.get("s_tg_enabled") and tok and chat)
     a.telegram_token = tok
     a.telegram_chat_id = chat
@@ -600,75 +603,103 @@ with tab_score:
 
 
 # ─────────────────────────────────────────────────────────────
-# Tab 3: 📨 Telegram 通知
+# Tab 3: 📨 Telegram 通知 — per-user bot credentials
 # ─────────────────────────────────────────────────────────────
 with tab_tg:
-    theme.section_label("📨 TELEGRAM 通知設定")
+    theme.section_label("📨 你自己的 Telegram BOT 設定")
 
-    tok, chat, src = appcfg.telegram_credentials()
+    user_settings = auth.get_user_settings()
+    my_token = (user_settings.get("telegram_token") or "").strip()
+    my_chat = (user_settings.get("telegram_chat_id") or "").strip()
+    has_setup = bool(my_token and my_chat)
 
-    if appcfg.IS_CLOUD:
-        if src == "secrets":
-            # Don't show Chat ID — it's the app owner's, not the logged-in
-            # user's, and exposing even a masked version to other users
-            # would leak the owner's Telegram identity.
-            st.success(
-                "✓ Telegram 已由管理員透過 Streamlit Cloud Secrets 設定 · "
-                "Token 與 Chat ID 已隱藏"
-            )
-        else:
-            st.error("✗ 雲端模式下尚未設定 Telegram Secrets")
-            st.markdown(
-                "請至 **Streamlit Cloud → Settings → Secrets**，貼上以下內容，"
-                "**請勿在介面直接顯示 token**："
-            )
-            st.code(
-                '[telegram]\ntoken = "您的 BotFather token"\nchat_id = "您的 chat ID"',
-                language="toml",
-            )
+    if has_setup:
+        st.success(
+            f"✓ 你的 Telegram bot 已連結 · "
+            f"Chat ID 末尾 `…{my_chat[-3:]}`"
+        )
     else:
-        if src == "secrets":
-            st.info("ℹ Telegram 認證來自本地 `.streamlit/secrets.toml`（建議做法）")
-        elif src == "config":
-            st.warning(
-                "⚠ Telegram token 目前儲存於 `config.json`。"
-                "建議改放至 `.streamlit/secrets.toml`（已 gitignore，不會外洩）。"
-            )
-        else:
-            st.caption("尚未設定。可在下方填寫，或寫入 `.streamlit/secrets.toml`。")
+        st.info(
+            "👇 跟以下 3 步設定**你自己**的 Telegram bot — "
+            "每個 user 用獨立 bot，互不影響。"
+        )
+        with st.expander("📖 教學（首次設定）", expanded=True):
+            st.markdown("""
+**1. 開新 Telegram bot**
 
-        with st.expander("✏ 本地編輯 Telegram 認證（僅限本機）", expanded=src == "none"):
-            st.text_input(
-                "Bot Token (BotFather)",
-                value=tok,
-                type="password",
-                key="s_tg_token_local",
-                help="本地 token — 不會推送至 GitHub（config.json 已 gitignore）",
-            )
-            st.text_input("Chat ID (numeric)", value=chat, key="s_tg_chat_local")
-            if st.button("💾 寫入 config.json", key="tg_save_local"):
-                cfg_existing = appcfg._load_config_json()
-                cfg_existing["tg_token"] = st.session_state.s_tg_token_local
-                cfg_existing["tg_chat"] = st.session_state.s_tg_chat_local
-                ok, msg = appcfg.save_config_json(cfg_existing)
+- 喺 Telegram 找 [@BotFather](https://t.me/BotFather)
+- 打 `/newbot` → 跟指示輸入 bot 名 → 拿到 **Bot Token**
+
+**2. 拿你的 Chat ID**
+
+- 喺 Telegram 找 [@userinfobot](https://t.me/userinfobot)
+- 打 `/start` → bot 回覆你的 **Chat ID**（數字）
+
+**3. 拿你新建嘅 bot 發第一條訊息**
+
+- 喺 Telegram 搜尋你嘅 bot username（步驟 1 攞過）
+- 打 `/start` —令 bot 有資格主動發訊息俾你
+
+完成 → 喺下面填入 token + chat ID → 儲存 → 試訊息
+            """)
+
+    with st.form("user_tg_form"):
+        new_tok = st.text_input(
+            "Bot Token",
+            value=my_token,
+            type="password",
+            placeholder="123456:ABC-DEF...",
+            help="由 @BotFather 攞",
+        )
+        new_chat = st.text_input(
+            "Chat ID",
+            value=my_chat,
+            placeholder="123456789",
+            help="由 @userinfobot 攞（純數字）",
+        )
+        save_btn = st.form_submit_button(
+            "💾 儲存到我的帳戶", type="primary", use_container_width=True,
+        )
+        if save_btn:
+            new_tok_clean = new_tok.strip()
+            new_chat_clean = new_chat.strip()
+            if not new_tok_clean or not new_chat_clean:
+                st.error("Token 同 Chat ID 都要填")
+            else:
+                ok, msg = auth.save_user_settings(
+                    telegram_token=new_tok_clean,
+                    telegram_chat_id=new_chat_clean,
+                )
+                if ok:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+
+    if has_setup:
+        st.divider()
+        bc1, bc2 = st.columns(2)
+        with bc1:
+            if st.button("🔔 測試訊息", use_container_width=True):
+                ok, msg = scraper.telegram_test_ping(my_token, my_chat)
                 (st.success if ok else st.error)(msg)
-                st.rerun()
+        with bc2:
+            if st.button("✗ 清除", use_container_width=True):
+                ok, msg = auth.save_user_settings(
+                    telegram_token="", telegram_chat_id="",
+                )
+                if ok:
+                    st.rerun()
 
     st.divider()
 
-    if src in ("secrets", "config"):
-        toggle_help = (
-            "已設定 token，預設自動開啟。"
-            "雲端 session 重啟後會保持開啟（因為 secrets 仍然存在）。"
-        )
-    else:
-        toggle_help = "尚未設定 token，此項目暫時無法啟用。"
-
+    # Push options
     st.checkbox(
-        "啟用 Telegram 推送（每條新工作即時通知）",
+        "啟用 Telegram 推送（每次 scrape 自動推 paginated card）",
         key="s_tg_enabled",
-        disabled=src == "none",
-        help=toggle_help,
+        disabled=not has_setup,
+        value=has_setup,
+        help="設好 bot 之後預設啟用。" if has_setup else "請先設定 bot。",
     )
 
     cc1, cc2 = st.columns(2)
@@ -681,14 +712,45 @@ with tab_tg:
         )
     with cc2:
         st.checkbox(
-            "加 儲存 / 隱藏 / 已申請 按鈕（需 bot_listener.py）",
+            "加 儲存 / 隱藏 / 已申請 按鈕",
             key="s_include_actions",
             disabled=not st.session_state.get("s_tg_enabled", False),
         )
 
-    if st.button("🔔 測試 Telegram", disabled=not (tok and chat)):
-        ok, msg = scraper.telegram_test_ping(tok, chat)
-        (st.success if ok else st.error)(msg)
+    # Webhook registration (one-time)
+    if has_setup:
+        with st.expander("⚙ 進階：註冊 webhook（首次設好 bot 之後做一次）"):
+            st.caption(
+                "你嘅 bot 需要 register 一個 webhook URL，"
+                "Telegram 先會將翻頁 / Save / Hide 按鈕嘅 callback 寄去個 bot_listener。"
+            )
+            bot_listener_url = st.text_input(
+                "Bot Listener URL",
+                value=appcfg._secret("bot_listener", "url",
+                                      "https://jobradar-bot.onrender.com"),
+                help="管理員部署嘅 Render service URL（通常 `https://jobradar-bot.onrender.com`）",
+            )
+            if st.button("🔗 註冊我嘅 bot 嘅 webhook"):
+                import urllib.request, json as _json
+                webhook_url = bot_listener_url.rstrip("/") + "/webhook"
+                api = f"https://api.telegram.org/bot{my_token}/setWebhook"
+                payload = _json.dumps({
+                    "url": webhook_url,
+                    "allowed_updates": ["callback_query"],
+                }).encode()
+                req = urllib.request.Request(
+                    api, data=payload, method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        body = _json.loads(resp.read().decode("utf-8"))
+                        if body.get("ok"):
+                            st.success(f"✓ Webhook 已註冊至 {webhook_url}")
+                        else:
+                            st.error(f"失敗：{body.get('description')}")
+                except Exception as e:
+                    st.error(f"網絡錯誤：{e}")
 
 
 # ─────────────────────────────────────────────────────────────
