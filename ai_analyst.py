@@ -30,7 +30,7 @@ import streamlit as st
 
 _MODEL_NAME = "gemini-2.5-flash"   # Free, fast, plenty for short tasks
 _model = None
-_model_init_err = None
+_last_err = ""   # Last init error message (NOT cached as a permanent flag)
 
 
 # ============================================================
@@ -38,31 +38,69 @@ _model_init_err = None
 # ============================================================
 
 def _get_api_key():
-    """Read Gemini key from st.secrets[gemini].api_key or env var."""
-    try:
-        return st.secrets["gemini"]["api_key"]
-    except (KeyError, FileNotFoundError, AttributeError):
-        pass
-    return os.environ.get("GEMINI_API_KEY", "")
+    """Read Gemini key. Try several conventional locations so a
+    misplaced secret still works."""
+    # 1. st.secrets[gemini].api_key (preferred)
+    for section_key, leaf in (
+        ("gemini", "api_key"),
+        ("gemini", "key"),
+        ("google_ai", "api_key"),
+        ("google", "api_key"),
+    ):
+        try:
+            v = st.secrets[section_key][leaf]
+            if v:
+                return str(v).strip()
+        except (KeyError, FileNotFoundError, AttributeError):
+            continue
+
+    # 2. Flat keys at the top of secrets
+    for flat in ("GEMINI_API_KEY", "gemini_api_key", "GOOGLE_API_KEY"):
+        try:
+            v = st.secrets[flat]
+            if v:
+                return str(v).strip()
+        except (KeyError, FileNotFoundError, AttributeError):
+            continue
+
+    # 3. Environment variable
+    return (os.environ.get("GEMINI_API_KEY") or "").strip()
 
 
 def _get_model():
-    global _model, _model_init_err
+    """Return a Gemini model instance, or None on failure.
+
+    NOTE: previous version cached _model_init_err which made the function
+    return None forever once a single init failed — even after the user
+    fixed their secrets and Streamlit reloaded the module hot. Now we
+    only cache the success (the model object); errors retry every call
+    so a Save-secrets is reflected immediately.
+    """
+    global _model, _last_err
     if _model is not None:
         return _model
-    if _model_init_err is not None:
-        return None
-    key = (_get_api_key() or "").strip()
+    key = _get_api_key()
     if not key:
-        _model_init_err = "Gemini API key 未設定（admin 需於 secrets 加 [gemini].api_key）"
+        _last_err = (
+            "Gemini API key 未設定。請於 Streamlit Cloud → Settings → "
+            "Secrets 加上 [gemini] api_key = \"AIzaSy...\"，Save 後等 "
+            "30 秒 redeploy。如已加但仍失敗，去 Manage app → ⋮ Reboot。"
+        )
         return None
     try:
         import google.generativeai as genai
         genai.configure(api_key=key)
         _model = genai.GenerativeModel(_MODEL_NAME)
+        _last_err = ""
         return _model
+    except ImportError:
+        _last_err = (
+            "google-generativeai 套件未安裝。確認 requirements.txt 已包含 "
+            "google-generativeai 同等 Streamlit Cloud 重新 install dependencies。"
+        )
+        return None
     except Exception as e:
-        _model_init_err = f"Gemini 載入失敗: {e}"
+        _last_err = f"Gemini 載入失敗：{e}"
         return None
 
 
@@ -71,9 +109,9 @@ def is_available():
 
 
 def availability_reason():
-    """Human-readable string describing why AI isn't available, if so."""
-    _get_model()
-    return _model_init_err or ""
+    """Human-readable string describing why AI isn't available."""
+    _get_model()   # refresh _last_err
+    return _last_err
 
 
 def _call_llm(prompt, max_chars=4000):
