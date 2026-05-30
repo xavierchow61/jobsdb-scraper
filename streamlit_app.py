@@ -160,24 +160,33 @@ def _post_scrape_send_paginated(args, csv_path):
         print("  [tg-cards] CSV 為空，跳過")
         return
 
-    # Apply match-threshold filter (mirroring scraper.process_new_row logic)
+    # Apply match-threshold filter. Prefer AI Fit (Gemini) over keyword
+    # Match Score — AI Fit reflects context-aware fit and is what the
+    # user actually wants for "should I get notified about this?".
     threshold = float(getattr(args, "match_threshold", 0) or 0)
+    jd_nums = [r.get("JD Number") for r in rows if r.get("JD Number")]
+    ai_fit_by_jd = _fetch_ai_fits(sup, user_id, jd_nums)
     if threshold > 0:
         kept = []
         for r in rows:
-            try:
-                s = float(r.get("Match Score") or 0)
-            except (TypeError, ValueError):
-                s = 0
-            if s >= threshold:
+            score = _effective_score(r, ai_fit_by_jd)
+            if score >= threshold:
                 kept.append(r)
         skipped = len(rows) - len(kept)
         if skipped:
-            print(f"  [tg-cards] {skipped} 條低於下限 {threshold:.0f}，已過濾")
+            metric = "AI Fit" if ai_fit_by_jd else "Match Score"
+            print(f"  [tg-cards] {skipped} 條低於下限 {threshold:.0f}（用 {metric}），已過濾")
         rows = kept
     if not rows:
         print(f"  [tg-cards] 無工作達到下限，0 通知")
         return
+
+    # Replace the row's Match Score with AI Fit before sending so the
+    # paginated Telegram card displays the AI score (more meaningful).
+    for r in rows:
+        jd = r.get("JD Number") or ""
+        if jd in ai_fit_by_jd:
+            r["Match Score"] = int(round(ai_fit_by_jd[jd]))
 
     # Apply telegram_max cap (mirror scraper)
     limit = int(getattr(args, "telegram_max", 0) or 0)
@@ -253,6 +262,112 @@ def _post_sync_master(args):
         print(f"  [master-sync] 同步失敗: {e}")
 
 
+def _auto_ai_analyze(args, csv_path):
+    """Run Gemini fit analysis for every row in the per-run CSV.
+
+    Results land in Supabase job_analysis (cached). Downstream code
+    (filter, Telegram push, UI table) reads the cache and prefers
+    AI Fit over keyword Match Score. Idempotent — already-cached
+    rows skip the LLM call inside analyze_mismatch.
+    """
+    if ai_analyst is None:
+        return
+    if not ai_analyst.is_available():
+        print(f"  [ai] {ai_analyst.availability_reason()}")
+        return
+    user_id = getattr(args, "user_id", None)
+    if not user_id or not csv_path:
+        return
+
+    sb_url, sb_service = appcfg.supabase_service_credentials()
+    if not (sb_url and sb_service):
+        print("  [ai] Supabase service_role 未設定，跳過 AI 分析")
+        return
+    sup = telegram_cards.supabase_client(sb_url, sb_service)
+    if not sup:
+        return
+
+    try:
+        cv_kw = list(st.session_state.get("cv_keywords") or [])
+        cv_yr = st.session_state.get("cv_years")
+    except Exception:
+        cv_kw, cv_yr = [], None
+
+    if not cv_kw:
+        print("  [ai] 無 CV keywords，跳過 AI 分析")
+        return
+
+    import csv as _csv
+    p = Path(str(csv_path))
+    if not p.exists():
+        return
+    try:
+        with open(p, encoding="utf-8-sig", newline="") as fh:
+            rows = list(_csv.DictReader(fh))
+    except Exception as e:
+        print(f"  [ai] 讀取 CSV 失敗: {e}")
+        return
+    if not rows:
+        return
+
+    print(f"  [ai] 開始為 {len(rows)} 條工作運行 Gemini fit 分析…")
+    success = 0
+    for i, r in enumerate(rows, 1):
+        if not r.get("JD Number"):
+            continue
+        try:
+            obj, err = ai_analyst.analyze_mismatch(
+                sup, user_id, cv_kw, cv_yr, r,
+            )
+            if err:
+                print(f"  [ai] 第 {i} 條：{err}")
+            elif obj and obj.get("fit_score") is not None:
+                success += 1
+        except Exception as e:
+            print(f"  [ai] 第 {i} 條失敗: {e}")
+        if i % 5 == 0 or i == len(rows):
+            print(f"  [ai]   進度 {i}/{len(rows)}")
+    print(f"  [ai] 完成 {success}/{len(rows)} 條 fit 分析（已快取至 Supabase）")
+
+
+def _fetch_ai_fits(supabase, user_id, jd_numbers):
+    """Batch-read fit_score from job_analysis cache. Returns {jd: score}."""
+    if not supabase or not user_id or not jd_numbers:
+        return {}
+    try:
+        res = (
+            supabase.table("job_analysis")
+            .select("jd_number, mismatch_analysis")
+            .eq("user_id", str(user_id))
+            .in_("jd_number", list(jd_numbers))
+            .execute()
+        )
+    except Exception as e:
+        print(f"  [ai] 讀取 fit cache 失敗: {e}")
+        return {}
+    out = {}
+    for ar in (res.data or []):
+        ma = ar.get("mismatch_analysis") or {}
+        if ma.get("fit_score") is not None:
+            try:
+                out[ar["jd_number"]] = float(ma["fit_score"])
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def _effective_score(row, ai_fit_by_jd):
+    """Return the score we should use for this row: AI Fit if cached,
+    else fall back to keyword Match Score."""
+    jd = row.get("JD Number") or ""
+    if jd in ai_fit_by_jd:
+        return ai_fit_by_jd[jd]
+    try:
+        return float(row.get("Match Score") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def run_scrape(args, q, stop_event, result):
     old_stdout = sys.stdout
     sys.stdout = StreamPipe(q)
@@ -277,6 +392,11 @@ def run_scrape(args, q, stop_event, result):
 
         # POST-SCRAPE: push new rows (including just-scraped) up to Supabase
         _post_sync_master(args)
+
+        # AUTO AI: run Gemini fit analysis for each new job before any
+        # downstream threshold / Telegram logic — so AI Fit is the
+        # primary score, not keyword Match.
+        _auto_ai_analyze(args, path)
 
         # Re-enable for the paginated send + actually send
         if wanted_tg:
@@ -1189,27 +1309,33 @@ if active == "📊 結果 & 日誌":
                     fit_val = ai_fit_by_jd.get(r.get("JD Number"))
                     r["AI Fit"] = int(fit_val) if fit_val is not None else None
 
-                # Filter logic
+                # Filter logic — prefer AI Fit (Gemini) over keyword Match.
+                # AI Fit reflects context-aware reasoning; keyword Match is
+                # the legacy narrow vocab score.
                 threshold = float(st.session_state.get("s_match_threshold", 0) or 0)
-                # Default: hide Match=0 (no keyword overlap) rows. User can
-                # opt-in via the toggle to see them.
                 show_zero = st.checkbox(
-                    "顯示 Match=0 的工作（JD 與 CV 完全無 keyword overlap）",
+                    "顯示低分／無分的工作（包括 AI Fit < 下限 及 keyword 完全無 overlap）",
                     value=False, key="show_zero_match",
                 )
+
+                def _row_score(r):
+                    """AI Fit (if cached) ─ else keyword Match Score."""
+                    jd = r.get("JD Number") or ""
+                    if jd in ai_fit_by_jd:
+                        return float(ai_fit_by_jd[jd])
+                    try:
+                        return float(r.get("Match Score") or 0)
+                    except (TypeError, ValueError):
+                        return 0.0
+
                 rows = all_rows
-                # Threshold filter (only if user set > 0)
                 if threshold > 0:
-                    rows = [
-                        r for r in rows
-                        if float(r.get("Match Score") or 0) >= threshold
-                    ]
-                # Always hide pure-zero unless user opted in
+                    rows = [r for r in rows if _row_score(r) >= threshold]
                 if not show_zero:
-                    rows = [
-                        r for r in rows
-                        if float(r.get("Match Score") or 0) > 0
-                    ]
+                    # When threshold=0, hide rows scored 0 (no signal).
+                    # When threshold>0, threshold already covered the cut.
+                    if threshold == 0:
+                        rows = [r for r in rows if _row_score(r) > 0]
                 hidden_count = total_scraped - len(rows)
 
                 if rows:
@@ -1225,19 +1351,25 @@ if active == "📊 結果 & 日誌":
                         "請使用下方的 **🎯 配對分析** 取得 Gemini AI 的 fit 分數（理解 context）。"
                     )
 
-                    # Display key columns only (otherwise too wide).
-                    # Show AI Fit only if at least one row has it cached.
+                    # AI Fit always shown when Gemini is configured (even
+                    # before any analysis has been cached — column displays
+                    # blanks until batch fills them).
+                    ai_available = (
+                        ai_analyst is not None and ai_analyst.is_available()
+                    )
                     cols_order = [
                         "AI Fit", "Match Score", "Match Keywords",
                         "Job Title", "Company",
                         "Salary", "Location", "Posted Date",
                         "Work Type", "URL",
                     ]
-                    has_ai = any(r.get("AI Fit") is not None for r in rows)
-                    display_cols = [
-                        c for c in cols_order
-                        if c in rows[0] and (c != "AI Fit" or has_ai)
-                    ]
+                    display_cols = []
+                    for c in cols_order:
+                        if c not in rows[0]:
+                            continue
+                        if c == "AI Fit" and not ai_available:
+                            continue
+                        display_cols.append(c)
                     table_data = [
                         {k: r.get(k) for k in display_cols}
                         for r in rows
