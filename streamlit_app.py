@@ -331,6 +331,16 @@ def build_args():
     a.csv = True
     a.master = (s.get("s_master") or "").strip() if s.get("s_master_enabled") else ""
 
+    # ISOLATION FIX: on Streamlit Cloud, /tmp is shared across all
+    # concurrent user sessions on the same container. If two users
+    # scrape at the same time, _pre_populate_master would overwrite
+    # each other's xlsx and _post_sync_master would upsert the wrong
+    # user's rows. Use a per-user filename.
+    if appcfg.IS_CLOUD and a.master:
+        _u = auth.get_user()
+        if _u and _u.get("id"):
+            a.master = f"/tmp/jobs_master_{_u['id']}.xlsx"
+
     # Per-user Telegram credentials (from Supabase user_settings)
     user_settings = auth.get_user_settings()
     tok = (user_settings.get("telegram_token") or "").strip()

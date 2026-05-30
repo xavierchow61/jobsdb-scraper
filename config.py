@@ -121,7 +121,10 @@ def telegram_credentials():
 # Keys to skip when loading [defaults] from Streamlit Secrets (and when
 # exporting the TOML snippet on the Settings page). Either per-machine
 # paths, credentials, or per-run values that shouldn't be a "default".
-DEFAULTS_SKIP = {"master", "output", "tg_token", "tg_chat", "at"}
+# - master / output / cv: per-machine filesystem paths
+# - tg_token / tg_chat: credentials (must come from user_settings, not URL)
+# - at: per-run schedule, not a sensible "default"
+DEFAULTS_SKIP = {"master", "output", "cv", "tg_token", "tg_chat", "at"}
 
 
 SETTING_SPECS = {
