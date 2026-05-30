@@ -368,7 +368,7 @@ def _render_fit_analysis(obj):
         sk1, sk2 = st.columns(2)
         with sk1:
             if matched:
-                st.caption("✅ 配對到嘅 skill")
+                st.caption("✅ 已配對的 skill")
                 st.write(", ".join(matched))
         with sk2:
             if missing:
@@ -525,7 +525,7 @@ if not auth.is_logged_in():
 
         with tab_reset:
             with st.form("reset_form"):
-                em = st.text_input("Email", placeholder="你註冊嘅 email",
+                em = st.text_input("Email", placeholder="你註冊的 email",
                                    key="reset_email")
                 if st.form_submit_button("📧 寄重設密碼連結",
                                           use_container_width=True):
@@ -781,7 +781,7 @@ if active == "🎯 比對分數":
         </div>
         <div style="flex:1;background:{theme.PALETTE['warning_subtle']};border:1px solid {theme.PALETTE['warning']};
              border-radius:10px;padding:10px;text-align:center;color:{theme.PALETTE['warning']};">
-          <b>40 – 69</b><br/><span style="font-size:0.75rem;">有關但唔強</span>
+          <b>40 – 69</b><br/><span style="font-size:0.75rem;">有關但不強</span>
         </div>
         <div style="flex:1;background:{theme.PALETTE['success_subtle']};border:1px solid {theme.PALETTE['success']};
              border-radius:10px;padding:10px;text-align:center;color:{theme.PALETTE['success']};">
@@ -822,20 +822,20 @@ if active == "📨 Telegram 通知":
             st.markdown("""
 **1. 開新 Telegram bot**
 
-- 喺 Telegram 找 [@BotFather](https://t.me/BotFather)
-- 打 `/newbot` → 跟指示輸入 bot 名 → 拿到 **Bot Token**
+- 在 Telegram 找 [@BotFather](https://t.me/BotFather)
+- 輸入 `/newbot` → 跟指示輸入 bot 名稱 → 取得 **Bot Token**
 
-**2. 拿你的 Chat ID**
+**2. 取得你的 Chat ID**
 
-- 喺 Telegram 找 [@userinfobot](https://t.me/userinfobot)
-- 打 `/start` → bot 回覆你的 **Chat ID**（數字）
+- 在 Telegram 找 [@userinfobot](https://t.me/userinfobot)
+- 輸入 `/start` → bot 回覆你的 **Chat ID**（數字）
 
-**3. 拿你新建嘅 bot 發第一條訊息**
+**3. 向你新建的 bot 發送第一條訊息**
 
-- 喺 Telegram 搜尋你嘅 bot username（步驟 1 攞過）
-- 打 `/start` —令 bot 有資格主動發訊息俾你
+- 在 Telegram 搜尋你的 bot username（步驟 1 取得）
+- 輸入 `/start` — 令 bot 有資格主動發送訊息給你
 
-完成 → 喺下面填入 token + chat ID → 儲存 → 試訊息
+完成 → 在下方填入 token + chat ID → 儲存 → 測試訊息
             """)
 
     with st.form("user_tg_form"):
@@ -844,13 +844,13 @@ if active == "📨 Telegram 通知":
             value=my_token,
             type="password",
             placeholder="123456:ABC-DEF...",
-            help="由 @BotFather 攞",
+            help="由 @BotFather 取得",
         )
         new_chat = st.text_input(
             "Chat ID",
             value=my_chat,
             placeholder="123456789",
-            help="由 @userinfobot 攞（純數字）",
+            help="由 @userinfobot 取得（純數字）",
         )
         save_btn = st.form_submit_button(
             "💾 儲存到我的帳戶", type="primary", use_container_width=True,
@@ -931,9 +931,9 @@ if active == "📨 Telegram 通知":
                 "Bot Listener URL",
                 value=appcfg._secret("bot_listener", "url",
                                       "https://jobradar-bot.onrender.com"),
-                help="管理員部署嘅 Render service URL（通常 `https://jobradar-bot.onrender.com`）",
+                help="管理員部署的 Render service URL（通常為 `https://jobradar-bot.onrender.com`）",
             )
-            if st.button("🔗 註冊我嘅 bot 嘅 webhook"):
+            if st.button("🔗 註冊我的 bot 的 webhook"):
                 import urllib.request, json as _json
                 webhook_url = bot_listener_url.rstrip("/") + "/webhook"
                 api = f"https://api.telegram.org/bot{my_token}/setWebhook"
@@ -1165,7 +1165,7 @@ if active == "📊 結果 & 日誌":
                 # Default: hide Match=0 (no keyword overlap) rows. User can
                 # opt-in via the toggle to see them.
                 show_zero = st.checkbox(
-                    "顯示 Match=0 嘅工作（JD 同 CV 完全冇 keyword overlap）",
+                    "顯示 Match=0 的工作（JD 與 CV 完全無 keyword overlap）",
                     value=False, key="show_zero_match",
                 )
                 rows = all_rows
@@ -1191,9 +1191,9 @@ if active == "📊 結果 & 日誌":
                         parts.append(f"已隱藏 Match=0 **{hidden_count}** 條（剩 **{len(rows)}**）")
                     st.caption("，".join(parts))
                     st.caption(
-                        "ℹ Match 係 keyword-based（CV 詞 vs JD 詞）— "
-                        "0 = JD 用嘅字眼同你 CV vocab 冇 overlap。"
-                        "請用下面嘅 **🎯 配對分析** 攞 Gemini AI 嘅 fit 分數（理解 context）。"
+                        "ℹ Match 為 keyword-based（CV 詞 vs JD 詞）— "
+                        "0 表示 JD 字句與你 CV 關鍵字無 overlap。"
+                        "請使用下方的 **🎯 配對分析** 取得 Gemini AI 的 fit 分數（理解 context）。"
                     )
 
                     # Display key columns only (otherwise too wide)
@@ -1222,22 +1222,22 @@ if active == "📊 結果 & 日誌":
                                 "Match", format="%d", width="small",
                             ),
                             "Match Keywords": st.column_config.TextColumn(
-                                "配對到嘅 keyword", width="medium",
+                                "已配對的 keyword", width="medium",
                             ),
                         },
                     )
                 else:
                     if total_scraped == 0:
-                        st.info("今次冇新工作。")
+                        st.info("今次無新工作。")
                     elif threshold > 0:
                         st.info(
-                            f"今次抓到 {total_scraped} 條，但全部 Match Score 都 < {threshold:.0f}。"
-                            "可以調低 Tab 🎯 比對分數 嘅下限，或者剔「顯示 Match=0」見全部。"
+                            f"今次抓到 {total_scraped} 條，但全部 Match Score 均 < {threshold:.0f}。"
+                            "可調低 Tab 🎯 比對分數 的下限，或勾選「顯示 Match=0」查看全部。"
                         )
                     else:
                         st.info(
-                            f"今次抓到 {total_scraped} 條，但全部 Match=0（CV 同 JD 冇 keyword overlap）。"
-                            "剔「顯示 Match=0」見全部，或者上 Tab 📄 CV 加多啲關鍵字。"
+                            f"今次抓到 {total_scraped} 條，但全部 Match=0（CV 與 JD 無 keyword overlap）。"
+                            "勾選「顯示 Match=0」查看全部，或至 Tab 📄 CV 增加更多關鍵字。"
                         )
 
                 # Downloads row — CSV + Excel
@@ -1290,7 +1290,7 @@ if active == "📊 結果 & 日誌":
                 # ─── AI JD 分析 panel ───
                 if rows and ai_analyst is not None:
                     st.divider()
-                    theme.section_label("🤖 AI 分析（揀一條工查看）")
+                    theme.section_label("🤖 AI 分析（選一條工作查看）")
                     if not ai_analyst.is_available():
                         st.caption(f"⚠ {ai_analyst.availability_reason()}")
                     else:
@@ -1447,7 +1447,7 @@ if active == "📌 我的工作":
                         st.bar_chart(dict(top_loc), height=200)
 
                 if top_co:
-                    st.caption("🏢 最多招聘嘅公司（Top 10）")
+                    st.caption("🏢 最多招聘的公司（Top 10）")
                     st.bar_chart(dict(top_co), height=220, horizontal=True)
             except Exception as e:
                 st.caption(f"⚠ 洞察渲染失敗：{e}")
@@ -1507,7 +1507,7 @@ if active == "📌 我的工作":
 
         with view_saved:
             render_job_list(saved_jobs, "_saved", "Saved",
-                            "尚未有已儲存的工作。喺 Telegram 點 ⭐ Save 就會記錄到呢度。")
+                            "尚未有已儲存的工作。在 Telegram 點 ⭐ Save 即會記錄至此。")
             # AI helpers per saved job
             if saved_jobs and ai_analyst is not None:
                 st.divider()
@@ -1564,10 +1564,10 @@ if active == "📌 我的工作":
                                 _render_fit_analysis(obj)
         with view_applied:
             render_job_list(applied_jobs, "_applied", "Applied",
-                            "尚未有已申請的工作。喺 Telegram 點 ✅ Applied 就會記錄到呢度。")
+                            "尚未有已申請的工作。在 Telegram 點 ✅ Applied 即會記錄至此。")
         with view_hidden:
             render_job_list(hidden_jobs, "_hidden", "Hidden",
-                            "尚未有已隱藏的工作。喺 Telegram 點 🚫 Hide 就會記錄到呢度。")
+                            "尚未有已隱藏的工作。在 Telegram 點 🚫 Hide 即會記錄至此。")
 
 
 # ============================================================
