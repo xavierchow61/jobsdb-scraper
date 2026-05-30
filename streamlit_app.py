@@ -1343,78 +1343,126 @@ if active == "📊 結果 & 日誌":
                     if threshold > 0:
                         parts.append(f"≥ {threshold:.0f} 分顯示 **{len(rows)}** 條")
                     elif hidden_count:
-                        parts.append(f"已隱藏 Match=0 **{hidden_count}** 條（剩 **{len(rows)}**）")
+                        parts.append(f"已隱藏低分 **{hidden_count}** 條（剩 **{len(rows)}**）")
                     st.caption("，".join(parts))
 
-                    # AI Fit always shown when Gemini is configured (even
-                    # before any analysis has been cached — column displays
-                    # blanks until batch fills them).
-                    ai_available = (
-                        ai_analyst is not None and ai_analyst.is_available()
-                    )
-                    cols_order = [
-                        "AI Fit",
-                        "Job Title", "Company",
-                        "Salary", "Location", "Posted Date",
-                        "Work Type", "URL",
-                    ]
-                    display_cols = []
-                    for c in cols_order:
-                        if c not in rows[0]:
-                            continue
-                        if c == "AI Fit" and not ai_available:
-                            continue
-                        display_cols.append(c)
-                    table_data = [
-                        {k: r.get(k) for k in display_cols}
-                        for r in rows
-                    ]
-                    st.dataframe(
-                        table_data,
-                        use_container_width=True,
-                        height=min(400, 40 + len(table_data) * 35),
-                        column_config={
-                            "URL": st.column_config.LinkColumn(
-                                "URL", width="small", display_text="🔗",
-                            ),
-                            "AI Fit": st.column_config.NumberColumn(
-                                "AI Fit", format="%d", width="small",
-                                help="Gemini AI 語意配對分數（0-100）",
-                            ),
-                        },
+                    # Sort by AI Fit descending (None at end)
+                    rows_sorted = sorted(
+                        rows,
+                        key=lambda r: -(r.get("AI Fit") or -1),
                     )
 
-                    # Batch AI 分析 button — fills cache for uncached rows
-                    if ai_analyst is not None and ai_analyst.is_available():
-                        uncached = [
-                            r for r in rows
-                            if r.get("JD Number")
-                            and not ai_fit_by_jd.get(r.get("JD Number"))
-                        ]
-                        if uncached:
-                            cv_kw_b = ss.get("cv_keywords") or []
-                            cv_yr_b = ss.get("cv_years")
-                            if st.button(
-                                f"🤖 為其餘 {len(uncached)} 條工作運行 Gemini 配對",
-                                key="ai_batch_run",
-                            ):
-                                prog = st.progress(0)
-                                stat = st.empty()
-                                for i, r in enumerate(uncached):
-                                    stat.caption(
-                                        f"分析中… {i + 1}/{len(uncached)}："
-                                        f"{(r.get('Job Title') or '')[:50]}"
+                    # Per-row cards — each has its own 📋 摘要 / 🎯 配對 buttons.
+                    # Analysis renders inline within the card on click.
+                    sup_user = auth.get_supabase()
+                    user_now = auth.get_user()
+                    uid_now = user_now["id"] if user_now else None
+                    cv_kw_now = ss.get("cv_keywords") or []
+                    cv_yr_now = ss.get("cv_years")
+                    ai_ok = (
+                        ai_analyst is not None and ai_analyst.is_available()
+                    )
+
+                    for r in rows_sorted:
+                        jd = r.get("JD Number") or ""
+                        safe_jd = jd.replace(":", "_").replace(" ", "_") or "noid"
+                        key_sum = f"sum_open_{safe_jd}"
+                        key_fit = f"fit_open_{safe_jd}"
+
+                        with st.container(border=True):
+                            # Header: AI Fit badge + title/company
+                            hc1, hc2 = st.columns([1, 8])
+                            fit = r.get("AI Fit")
+                            with hc1:
+                                if fit is not None:
+                                    color = (
+                                        theme.PALETTE["success"] if fit >= 70
+                                        else theme.PALETTE["warning"] if fit >= 40
+                                        else theme.PALETTE["red"]
                                     )
-                                    try:
-                                        ai_analyst.analyze_mismatch(
-                                            sup_user, user_now["id"],
-                                            cv_kw_b, cv_yr_b, r,
+                                    st.markdown(
+                                        f"<div style='font-size:1.8rem;font-weight:800;"
+                                        f"color:{color};text-align:center;line-height:1;'>"
+                                        f"{int(fit)}</div>"
+                                        f"<div style='font-size:0.65rem;color:"
+                                        f"{theme.PALETTE['muted']};text-align:center;"
+                                        f"margin-top:2px;'>AI Fit</div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                else:
+                                    st.markdown(
+                                        f"<div style='font-size:0.7rem;color:"
+                                        f"{theme.PALETTE['muted']};text-align:center;"
+                                        f"padding-top:14px;'>未分析</div>",
+                                        unsafe_allow_html=True,
+                                    )
+                            with hc2:
+                                title = r.get("Job Title") or "(無標題)"
+                                company = r.get("Company") or ""
+                                st.markdown(
+                                    f"**{title}**"
+                                    + (f" — {company}" if company else "")
+                                )
+                                meta_parts = [
+                                    v for v in (
+                                        r.get("Salary"),
+                                        r.get("Location"),
+                                        r.get("Work Type"),
+                                        (r.get("Posted Date") or "")[:10],
+                                    ) if v
+                                ]
+                                if meta_parts:
+                                    st.caption(" · ".join(meta_parts))
+                                url = r.get("URL") or ""
+                                if url:
+                                    st.markdown(
+                                        f"<a href='{url}' target='_blank' "
+                                        f"style='font-size:0.78rem;color:"
+                                        f"{theme.PALETTE['accent']};'>"
+                                        f"🔗 開啟 JD</a>",
+                                        unsafe_allow_html=True,
+                                    )
+
+                            # Action buttons
+                            if ai_ok:
+                                bc1, bc2, _ = st.columns([1.2, 1.2, 4])
+                                if bc1.button("📋 JD 摘要",
+                                              key=f"btn_sum_{safe_jd}",
+                                              use_container_width=True):
+                                    st.session_state[key_sum] = (
+                                        not st.session_state.get(key_sum, False)
+                                    )
+                                if bc2.button("🎯 配對分析",
+                                              key=f"btn_fit_{safe_jd}",
+                                              use_container_width=True):
+                                    st.session_state[key_fit] = (
+                                        not st.session_state.get(key_fit, False)
+                                    )
+
+                                # Inline expansions
+                                if st.session_state.get(key_sum):
+                                    with st.spinner("Gemini 摘要中…"):
+                                        text, err = ai_analyst.summarize_jd(
+                                            sup_user, uid_now, r,
                                         )
-                                    except Exception as e:
-                                        print(f"batch ai failed: {e}")
-                                    prog.progress((i + 1) / len(uncached))
-                                stat.caption("完成 — 重新整理表格")
-                                st.rerun()
+                                    if err:
+                                        st.error(err)
+                                    elif text:
+                                        st.markdown(text)
+                                if st.session_state.get(key_fit):
+                                    with st.spinner("Gemini 配對分析中…"):
+                                        obj, err = ai_analyst.analyze_mismatch(
+                                            sup_user, uid_now,
+                                            cv_kw_now, cv_yr_now, r,
+                                        )
+                                    if err:
+                                        st.error(err)
+                                    elif obj:
+                                        _render_fit_analysis(obj)
+                            else:
+                                st.caption(
+                                    f"⚠ AI 分析未啟用：{ai_analyst.availability_reason() if ai_analyst else 'ai_analyst 模組未載入'}"
+                                )
                 else:
                     if total_scraped == 0:
                         st.info("今次無新工作。")
@@ -1476,56 +1524,8 @@ if active == "📊 結果 & 日誌":
                     else:
                         st.caption("⚠ Excel 轉換失敗")
 
-                # ─── AI JD 分析 panel ───
-                if rows and ai_analyst is not None:
-                    st.divider()
-                    theme.section_label("🤖 AI 分析（選一條工作查看）")
-                    if not ai_analyst.is_available():
-                        st.caption(f"⚠ {ai_analyst.availability_reason()}")
-                    else:
-                        labels = [
-                            f"{i + 1}. {(r.get('Job Title') or '').strip()[:60]}"
-                            f"  @ {(r.get('Company') or '').strip()[:25]}"
-                            for i, r in enumerate(rows)
-                        ]
-                        pick = st.selectbox(
-                            "選擇工作",
-                            options=list(range(len(rows))),
-                            format_func=lambda i: labels[i],
-                            key="ai_job_pick",
-                        )
-                        chosen = rows[pick]
-
-                        sup_ai = auth.get_supabase()
-                        user_ai = auth.get_user()
-                        uid_ai = user_ai["id"] if user_ai else None
-                        cv_kw_ai = ss.get("cv_keywords") or []
-                        cv_yr_ai = ss.get("cv_years")
-
-                        ai1, ai2 = st.columns(2)
-                        with ai1:
-                            if st.button("📋 JD 摘要", key="ai_btn_sum",
-                                         use_container_width=True):
-                                with st.spinner("Gemini 分析中…"):
-                                    text, err = ai_analyst.summarize_jd(
-                                        sup_ai, uid_ai, chosen,
-                                    )
-                                if err:
-                                    st.error(err)
-                                elif text:
-                                    st.markdown(text)
-                        with ai2:
-                            if st.button("🎯 配對分析", key="ai_btn_fit",
-                                         use_container_width=True):
-                                with st.spinner("Gemini 比對 CV ↔ JD 中…"):
-                                    obj, err = ai_analyst.analyze_mismatch(
-                                        sup_ai, uid_ai, cv_kw_ai, cv_yr_ai,
-                                        chosen,
-                                    )
-                                if err:
-                                    st.error(err)
-                                elif obj:
-                                    _render_fit_analysis(obj)
+                # AI buttons are now inside each job card above; the old
+                # selectbox-based panel below has been removed.
             except Exception as e:
                 st.warning(f"讀取輸出檔失敗: {e}")
 
