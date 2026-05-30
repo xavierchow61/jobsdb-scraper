@@ -1314,7 +1314,7 @@ if active == "📊 結果 & 日誌":
                 # the legacy narrow vocab score.
                 threshold = float(st.session_state.get("s_match_threshold", 0) or 0)
                 show_zero = st.checkbox(
-                    "顯示低分／無分的工作（包括 AI Fit < 下限 及 keyword 完全無 overlap）",
+                    "顯示無分數的工作（AI 未分析或分析失敗）",
                     value=False, key="show_zero_match",
                 )
 
@@ -1345,11 +1345,6 @@ if active == "📊 結果 & 日誌":
                     elif hidden_count:
                         parts.append(f"已隱藏 Match=0 **{hidden_count}** 條（剩 **{len(rows)}**）")
                     st.caption("，".join(parts))
-                    st.caption(
-                        "ℹ Match 為 keyword-based（CV 詞 vs JD 詞）— "
-                        "0 表示 JD 字句與你 CV 關鍵字無 overlap。"
-                        "請使用下方的 **🎯 配對分析** 取得 Gemini AI 的 fit 分數（理解 context）。"
-                    )
 
                     # AI Fit always shown when Gemini is configured (even
                     # before any analysis has been cached — column displays
@@ -1358,7 +1353,7 @@ if active == "📊 結果 & 日誌":
                         ai_analyst is not None and ai_analyst.is_available()
                     )
                     cols_order = [
-                        "AI Fit", "Match Score", "Match Keywords",
+                        "AI Fit",
                         "Job Title", "Company",
                         "Salary", "Location", "Posted Date",
                         "Work Type", "URL",
@@ -1384,14 +1379,7 @@ if active == "📊 結果 & 日誌":
                             ),
                             "AI Fit": st.column_config.NumberColumn(
                                 "AI Fit", format="%d", width="small",
-                                help="Gemini AI 配對分數（已快取的工作）",
-                            ),
-                            "Match Score": st.column_config.NumberColumn(
-                                "Match", format="%d", width="small",
-                                help="Keyword overlap 分數（CV vocab ∩ JD 文字）",
-                            ),
-                            "Match Keywords": st.column_config.TextColumn(
-                                "已配對的 keyword", width="medium",
+                                help="Gemini AI 語意配對分數（0-100）",
                             ),
                         },
                     )
@@ -1432,13 +1420,13 @@ if active == "📊 結果 & 日誌":
                         st.info("今次無新工作。")
                     elif threshold > 0:
                         st.info(
-                            f"今次抓到 {total_scraped} 條，但全部 Match Score 均 < {threshold:.0f}。"
-                            "可調低 Tab 🎯 比對分數 的下限，或勾選「顯示 Match=0」查看全部。"
+                            f"今次抓到 {total_scraped} 條，但全部分數均 < {threshold:.0f}。"
+                            "可調低 Tab 🎯 比對分數 的下限，或勾選下方選項查看全部。"
                         )
                     else:
                         st.info(
-                            f"今次抓到 {total_scraped} 條，但全部 Match=0（CV 與 JD 無 keyword overlap）。"
-                            "勾選「顯示 Match=0」查看全部，或至 Tab 📄 CV 增加更多關鍵字。"
+                            f"今次抓到 {total_scraped} 條，但全部評分為 0（Gemini 未配置或分析未完成）。"
+                            "勾選下方選項查看全部，或至 Tab 📄 CV 確認關鍵字已抽取。"
                         )
 
                 # Downloads row — CSV + Excel
