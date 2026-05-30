@@ -1753,16 +1753,33 @@ if active == "📌 我的工作":
                 companies = [r.get("company") for r in master_rows if r.get("company")]
                 top_co = Counter(companies).most_common(10)
 
-                # Match score distribution
+                # AI Fit score distribution — primary score is the Gemini
+                # AI Fit value. Fall back to keyword match_score only when
+                # AI hasn't analysed that row yet.
+                jd_nums = [m.get("jd_number") for m in master_rows
+                           if m.get("jd_number")]
+                ai_fit_by_jd = _fetch_ai_fits(
+                    _supabase_service_client(), uid, jd_nums
+                )
                 score_buckets = {"0–19": 0, "20–39": 0, "40–59": 0,
                                  "60–79": 0, "80–100": 0}
+                ai_count = 0
+                fb_count = 0
                 for r in master_rows:
-                    s = r.get("match_score")
+                    jd = r.get("jd_number")
+                    s = None
+                    if jd and jd in ai_fit_by_jd:
+                        s = ai_fit_by_jd[jd]
+                        ai_count += 1
+                    else:
+                        raw = r.get("match_score")
+                        if raw is not None:
+                            try:
+                                s = float(raw)
+                                fb_count += 1
+                            except (TypeError, ValueError):
+                                s = None
                     if s is None:
-                        continue
-                    try:
-                        s = float(s)
-                    except (TypeError, ValueError):
                         continue
                     if s < 20: score_buckets["0–19"] += 1
                     elif s < 40: score_buckets["20–39"] += 1
@@ -1777,7 +1794,18 @@ if active == "📌 我的工作":
                 # Two-column layout
                 lc, rc = st.columns(2)
                 with lc:
-                    st.caption("📊 配對分數分佈")
+                    if ai_count > 0:
+                        st.caption(
+                            f"📊 AI Fit 配對分數分佈"
+                            f"（AI 已分析 {ai_count} 條"
+                            + (f"・其餘 {fb_count} 條暫用關鍵字分數"
+                               if fb_count else "") + "）"
+                        )
+                    else:
+                        st.caption(
+                            "📊 配對分數分佈"
+                            "（暫未有 AI Fit，顯示關鍵字 Match 分數）"
+                        )
                     st.bar_chart(score_buckets, height=200)
                 with rc:
                     if top_loc:
@@ -1789,27 +1817,6 @@ if active == "📌 我的工作":
                     st.bar_chart(dict(top_co), height=220, horizontal=True)
             except Exception as e:
                 st.caption(f"⚠ 洞察渲染失敗：{e}")
-
-        st.divider()
-
-        # Download full master
-        if master_rows and master_sync is not None:
-            try:
-                xlsx_bytes = master_sync.build_xlsx_bytes(
-                    _supabase_service_client(), uid
-                )
-                if xlsx_bytes:
-                    from datetime import datetime as _dt
-                    fn = f"jobs_master_{_dt.now():%Y%m%d}.xlsx"
-                    st.download_button(
-                        f"📥 下載完整 Master xlsx · {len(xlsx_bytes)/1024:.1f} KB"
-                        f"（{len(master_rows)} 條）",
-                        xlsx_bytes, file_name=fn,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key="dl_master_xlsx",
-                    )
-            except Exception as e:
-                st.caption(f"⚠ Master xlsx 建立失敗：{e}")
 
         st.divider()
 
