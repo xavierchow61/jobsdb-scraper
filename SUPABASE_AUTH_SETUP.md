@@ -56,6 +56,20 @@ create table if not exists user_settings (
 
 
 -- ============================================================
+-- 3d. AI 分析快取（JD 摘要 / 配對 / Cover letter）
+-- ============================================================
+create table if not exists job_analysis (
+  user_id           uuid not null references auth.users on delete cascade,
+  jd_number         text not null,
+  jd_summary        text,
+  mismatch_analysis jsonb,
+  cover_letter      text,
+  generated_at      timestamptz default now(),
+  primary key (user_id, jd_number)
+);
+
+
+-- ============================================================
 -- 3c. Master jobs table (永久保存累積爬到嘅 job)
 -- 取代本機 /tmp/jobs_master.xlsx（雲端 ephemeral 唔可靠）
 -- ============================================================
@@ -94,6 +108,7 @@ alter table job_actions      enable row level security;
 alter table user_telegram    enable row level security;
 alter table user_settings    enable row level security;
 alter table master_jobs      enable row level security;
+alter table job_analysis     enable row level security;
 
 -- 之前可能 disable 過 → 先 drop 舊 policy
 drop policy if exists "users_own_batches"      on telegram_batches;
@@ -101,6 +116,7 @@ drop policy if exists "users_own_actions"      on job_actions;
 drop policy if exists "users_own_telegram_map" on user_telegram;
 drop policy if exists "users_own_settings"     on user_settings;
 drop policy if exists "users_own_master"       on master_jobs;
+drop policy if exists "users_own_analysis"     on job_analysis;
 drop policy if exists "anon_insert_batches"    on telegram_batches;
 drop policy if exists "anon_select_batches"    on telegram_batches;
 drop policy if exists "anon_update_batches"    on telegram_batches;
@@ -130,6 +146,11 @@ create policy "users_own_settings" on user_settings
   with check (auth.uid() = user_id);
 
 create policy "users_own_master" on master_jobs
+  for all to authenticated
+  using      (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "users_own_analysis" on job_analysis
   for all to authenticated
   using      (auth.uid() = user_id)
   with check (auth.uid() = user_id);

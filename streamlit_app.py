@@ -40,6 +40,11 @@ try:
 except ImportError:
     master_sync = None
 
+try:
+    import ai_analyst
+except ImportError:
+    ai_analyst = None
+
 
 # JobsDB hidden — Cloud datacenter IPs get HTTP 403 from hk.jobsdb.com.
 # CLI / local can still use `--source jobsdb`.
@@ -1141,6 +1146,77 @@ if active == "📊 結果 & 日誌":
                         )
                     else:
                         st.caption("⚠ Excel 轉換失敗")
+
+                # ─── AI JD 分析 panel ───
+                if rows and ai_analyst is not None:
+                    st.divider()
+                    theme.section_label("🤖 AI 分析（揀一條工查看）")
+                    if not ai_analyst.is_available():
+                        st.caption(f"⚠ {ai_analyst.availability_reason()}")
+                    else:
+                        labels = [
+                            f"{i + 1}. {(r.get('Job Title') or '').strip()[:60]}"
+                            f"  @ {(r.get('Company') or '').strip()[:25]}"
+                            for i, r in enumerate(rows)
+                        ]
+                        pick = st.selectbox(
+                            "選擇工作",
+                            options=list(range(len(rows))),
+                            format_func=lambda i: labels[i],
+                            key="ai_job_pick",
+                        )
+                        chosen = rows[pick]
+
+                        sup_ai = auth.get_supabase()
+                        user_ai = auth.get_user()
+                        uid_ai = user_ai["id"] if user_ai else None
+                        cv_kw_ai = ss.get("cv_keywords") or []
+                        cv_yr_ai = ss.get("cv_years")
+
+                        ai1, ai2 = st.columns(2)
+                        with ai1:
+                            if st.button("📋 JD 摘要", key="ai_btn_sum",
+                                         use_container_width=True):
+                                with st.spinner("Gemini 分析中…"):
+                                    text, err = ai_analyst.summarize_jd(
+                                        sup_ai, uid_ai, chosen,
+                                    )
+                                if err:
+                                    st.error(err)
+                                elif text:
+                                    st.markdown(text)
+                        with ai2:
+                            if st.button("🎯 配對分析", key="ai_btn_fit",
+                                         use_container_width=True):
+                                with st.spinner("Gemini 比對 CV ↔ JD 中…"):
+                                    obj, err = ai_analyst.analyze_mismatch(
+                                        sup_ai, uid_ai, cv_kw_ai, cv_yr_ai,
+                                        chosen,
+                                    )
+                                if err:
+                                    st.error(err)
+                                elif obj:
+                                    fit = obj.get("fit_score") or 0
+                                    color = (
+                                        theme.PALETTE["success"] if fit >= 70
+                                        else theme.PALETTE["warning"] if fit >= 40
+                                        else theme.PALETTE["red"]
+                                    )
+                                    st.markdown(
+                                        f"<div style='font-size:1.6rem;font-weight:800;"
+                                        f"color:{color};'>{fit} / 100</div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                    if obj.get("strength_summary"):
+                                        st.success(f"💪 {obj['strength_summary']}")
+                                    if obj.get("mismatch_reason"):
+                                        st.warning(f"⚠ {obj['mismatch_reason']}")
+                                    if obj.get("matched_skills"):
+                                        st.caption("✅ 配對到嘅 skill：")
+                                        st.write(", ".join(obj["matched_skills"]))
+                                    if obj.get("missing_skills"):
+                                        st.caption("❌ JD 有但 CV 無：")
+                                        st.write(", ".join(obj["missing_skills"]))
             except Exception as e:
                 st.warning(f"讀取輸出檔失敗: {e}")
 
@@ -1210,6 +1286,54 @@ if active == "📌 我的工作":
 
         st.write("")
 
+        # ─── Dashboard 招聘洞察 ───
+        if master_rows:
+            theme.section_label("📊 招聘市場洞察")
+            try:
+                from collections import Counter
+                # Top hiring companies
+                companies = [r.get("company") for r in master_rows if r.get("company")]
+                top_co = Counter(companies).most_common(10)
+
+                # Match score distribution
+                score_buckets = {"0–19": 0, "20–39": 0, "40–59": 0,
+                                 "60–79": 0, "80–100": 0}
+                for r in master_rows:
+                    s = r.get("match_score")
+                    if s is None:
+                        continue
+                    try:
+                        s = float(s)
+                    except (TypeError, ValueError):
+                        continue
+                    if s < 20: score_buckets["0–19"] += 1
+                    elif s < 40: score_buckets["20–39"] += 1
+                    elif s < 60: score_buckets["40–59"] += 1
+                    elif s < 80: score_buckets["60–79"] += 1
+                    else: score_buckets["80–100"] += 1
+
+                # Top location
+                locations = [r.get("location") for r in master_rows if r.get("location")]
+                top_loc = Counter(locations).most_common(8)
+
+                # Two-column layout
+                lc, rc = st.columns(2)
+                with lc:
+                    st.caption("📊 Match Score 分佈")
+                    st.bar_chart(score_buckets, height=200)
+                with rc:
+                    if top_loc:
+                        st.caption("📍 工作地點 Top 8")
+                        st.bar_chart(dict(top_loc), height=200)
+
+                if top_co:
+                    st.caption("🏢 最多招聘嘅公司（Top 10）")
+                    st.bar_chart(dict(top_co), height=220, horizontal=True)
+            except Exception as e:
+                st.caption(f"⚠ 洞察渲染失敗：{e}")
+
+        st.divider()
+
         # Download full master
         if master_rows and master_sync is not None:
             try:
@@ -1264,6 +1388,78 @@ if active == "📌 我的工作":
         with view_saved:
             render_job_list(saved_jobs, "_saved", "Saved",
                             "尚未有已儲存的工作。喺 Telegram 點 ⭐ Save 就會記錄到呢度。")
+            # AI helpers per saved job
+            if saved_jobs and ai_analyst is not None:
+                st.divider()
+                theme.section_label("✍ AI 助手（為已儲存工作生成 cover letter / gap 分析）")
+                if not ai_analyst.is_available():
+                    st.caption(f"⚠ {ai_analyst.availability_reason()}")
+                else:
+                    labels = [
+                        f"{i + 1}. {(r.get('job_title') or '').strip()[:60]}"
+                        f"  @ {(r.get('company') or '').strip()[:25]}"
+                        for i, r in enumerate(saved_jobs)
+                    ]
+                    pick_s = st.selectbox(
+                        "選擇 saved 工作",
+                        options=list(range(len(saved_jobs))),
+                        format_func=lambda i: labels[i],
+                        key="ai_saved_pick",
+                    )
+                    chosen_s = saved_jobs[pick_s]
+
+                    cv_kw_s = ss.get("cv_keywords") or []
+                    cv_yr_s = ss.get("cv_years")
+                    sup_s = auth.get_supabase()
+
+                    ab1, ab2 = st.columns(2)
+                    with ab1:
+                        if st.button("📝 Cover Letter (英文)",
+                                     key="ai_btn_cl",
+                                     use_container_width=True):
+                            with st.spinner("Gemini 撰寫中…"):
+                                text, err = ai_analyst.generate_cover_letter(
+                                    sup_s, uid, cv_kw_s, cv_yr_s, chosen_s,
+                                )
+                            if err:
+                                st.error(err)
+                            elif text:
+                                st.text_area(
+                                    "可直接 copy",
+                                    value=text, height=320,
+                                    key="cl_preview",
+                                    label_visibility="collapsed",
+                                )
+                    with ab2:
+                        if st.button("🎯 配對 / Gap 分析",
+                                     key="ai_btn_gap",
+                                     use_container_width=True):
+                            with st.spinner("Gemini 分析中…"):
+                                obj, err = ai_analyst.analyze_mismatch(
+                                    sup_s, uid, cv_kw_s, cv_yr_s, chosen_s,
+                                )
+                            if err:
+                                st.error(err)
+                            elif obj:
+                                fit = obj.get("fit_score") or 0
+                                color = (
+                                    theme.PALETTE["success"] if fit >= 70
+                                    else theme.PALETTE["warning"] if fit >= 40
+                                    else theme.PALETTE["red"]
+                                )
+                                st.markdown(
+                                    f"<div style='font-size:1.4rem;font-weight:800;"
+                                    f"color:{color};'>Fit: {fit} / 100</div>",
+                                    unsafe_allow_html=True,
+                                )
+                                if obj.get("missing_skills"):
+                                    st.warning(
+                                        "❌ 需補強：" + ", ".join(obj["missing_skills"])
+                                    )
+                                if obj.get("matched_skills"):
+                                    st.success(
+                                        "✅ 已配對：" + ", ".join(obj["matched_skills"])
+                                    )
         with view_applied:
             render_job_list(applied_jobs, "_applied", "Applied",
                             "尚未有已申請的工作。喺 Telegram 點 ✅ Applied 就會記錄到呢度。")
