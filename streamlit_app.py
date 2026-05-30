@@ -1172,11 +1172,17 @@ if active == "📊 結果 & 日誌":
                         f"今次抓到 **{len(rows)}** 條工作"
                         + (f"（match score ≥ {threshold:.0f}）" if threshold else "")
                     )
+                    st.caption(
+                        "ℹ Match 係 keyword-based（CV 詞 vs JD 詞）— "
+                        "0 = JD 用嘅字眼同你 CV vocab 冇 overlap。"
+                        "請用下面嘅 **🎯 配對分析** 攞 Gemini AI 嘅 fit 分數（理解 context）。"
+                    )
 
                     # Display key columns only (otherwise too wide)
                     display_cols = [
                         c for c in (
-                            "Match Score", "Job Title", "Company",
+                            "Match Score", "Match Keywords",
+                            "Job Title", "Company",
                             "Salary", "Location", "Posted Date",
                             "Work Type", "URL",
                         )
@@ -1196,6 +1202,9 @@ if active == "📊 結果 & 日誌":
                             ),
                             "Match Score": st.column_config.NumberColumn(
                                 "Match", format="%d", width="small",
+                            ),
+                            "Match Keywords": st.column_config.TextColumn(
+                                "配對到嘅 keyword", width="medium",
                             ),
                         },
                     )
