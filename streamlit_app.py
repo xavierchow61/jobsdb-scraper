@@ -488,12 +488,12 @@ def _render_fit_analysis(obj):
         sk1, sk2 = st.columns(2)
         with sk1:
             if matched:
-                st.caption("✅ 已配對的 skill")
-                st.write(", ".join(matched))
+                st.caption("✅ 已配對的技能")
+                st.write("、".join(matched))
         with sk2:
             if missing:
-                st.caption("❌ JD 有但 CV 無")
-                st.write(", ".join(missing))
+                st.caption("❌ 職位需要但履歷未有")
+                st.write("、".join(missing))
 
     # Concerns (collapsed by default — secondary info)
     concerns = obj.get("concerns") or obj.get("mismatch_reason")
@@ -1386,7 +1386,7 @@ if active == "📊 結果 & 日誌":
                                         f"{int(fit)}</div>"
                                         f"<div style='font-size:0.65rem;color:"
                                         f"{theme.PALETTE['muted']};text-align:center;"
-                                        f"margin-top:2px;'>AI Fit</div>",
+                                        f"margin-top:2px;'>智能配對</div>",
                                         unsafe_allow_html=True,
                                     )
                                 else:
@@ -1419,14 +1419,14 @@ if active == "📊 結果 & 日誌":
                                         f"<a href='{url}' target='_blank' "
                                         f"style='font-size:0.78rem;color:"
                                         f"{theme.PALETTE['accent']};'>"
-                                        f"🔗 開啟 JD</a>",
+                                        f"🔗 開啟原文</a>",
                                         unsafe_allow_html=True,
                                     )
 
                             # Action buttons
                             if ai_ok:
                                 bc1, bc2, _ = st.columns([1.2, 1.2, 4])
-                                if bc1.button("📋 JD 摘要",
+                                if bc1.button("📋 職位摘要",
                                               key=f"btn_sum_{safe_jd}",
                                               use_container_width=True):
                                     st.session_state[key_sum] = (
@@ -1441,7 +1441,7 @@ if active == "📊 結果 & 日誌":
 
                                 # Inline expansions
                                 if st.session_state.get(key_sum):
-                                    with st.spinner("Gemini 摘要中…"):
+                                    with st.spinner("智能摘要中…"):
                                         text, err = ai_analyst.summarize_jd(
                                             sup_user, uid_now, r,
                                         )
@@ -1450,7 +1450,7 @@ if active == "📊 結果 & 日誌":
                                     elif text:
                                         st.markdown(text)
                                 if st.session_state.get(key_fit):
-                                    with st.spinner("Gemini 配對分析中…"):
+                                    with st.spinner("智能配對分析中…"):
                                         obj, err = ai_analyst.analyze_mismatch(
                                             sup_user, uid_now,
                                             cv_kw_now, cv_yr_now, r,
@@ -1461,7 +1461,7 @@ if active == "📊 結果 & 日誌":
                                         _render_fit_analysis(obj)
                             else:
                                 st.caption(
-                                    f"⚠ AI 分析未啟用：{ai_analyst.availability_reason() if ai_analyst else 'ai_analyst 模組未載入'}"
+                                    f"⚠ 智能分析未啟用：{ai_analyst.availability_reason() if ai_analyst else '模組未載入'}"
                                 )
                 else:
                     if total_scraped == 0:
@@ -1628,7 +1628,7 @@ if active == "📌 我的工作":
                 # Two-column layout
                 lc, rc = st.columns(2)
                 with lc:
-                    st.caption("📊 Match Score 分佈")
+                    st.caption("📊 配對分數分佈")
                     st.bar_chart(score_buckets, height=200)
                 with rc:
                     if top_loc:
@@ -1678,24 +1678,24 @@ if active == "📌 我的工作":
             for r in rows:
                 display.append({
                     status_label: r.get(status_field, "")[:10] if r.get(status_field) else "",
-                    "Job Title": r.get("job_title") or "",
-                    "Company":   r.get("company") or "",
-                    "Salary":    r.get("salary") or "",
-                    "Location":  r.get("location") or "",
-                    "Match":     int(r["match_score"]) if r.get("match_score") else None,
-                    "URL":       r.get("url") or "",
+                    "職位": r.get("job_title") or "",
+                    "公司": r.get("company") or "",
+                    "薪酬": r.get("salary") or "",
+                    "地區": r.get("location") or "",
+                    "配對": int(r["match_score"]) if r.get("match_score") else None,
+                    "連結": r.get("url") or "",
                 })
             st.dataframe(
                 display, use_container_width=True,
                 height=min(500, 40 + len(display) * 35),
                 column_config={
-                    "URL": st.column_config.LinkColumn("", width="small", display_text="🔗"),
-                    "Match": st.column_config.NumberColumn(format="%d", width="small"),
+                    "連結": st.column_config.LinkColumn("", width="small", display_text="🔗"),
+                    "配對": st.column_config.NumberColumn(format="%d", width="small"),
                 },
             )
 
         with view_saved:
-            render_job_list(saved_jobs, "_saved", "Saved",
+            render_job_list(saved_jobs, "_saved", "已儲存",
                             "尚未有已儲存的工作。在 Telegram 點 ⭐ Save 即會記錄至此。")
             # AI helpers per saved job
             if saved_jobs and ai_analyst is not None:
@@ -1723,10 +1723,10 @@ if active == "📌 我的工作":
 
                     ab1, ab2 = st.columns(2)
                     with ab1:
-                        if st.button("📝 Cover Letter (英文)",
+                        if st.button("📝 求職信（英文）",
                                      key="ai_btn_cl",
                                      use_container_width=True):
-                            with st.spinner("Gemini 撰寫中…"):
+                            with st.spinner("智能撰寫中…"):
                                 text, err = ai_analyst.generate_cover_letter(
                                     sup_s, uid, cv_kw_s, cv_yr_s, chosen_s,
                                 )
@@ -1734,16 +1734,16 @@ if active == "📌 我的工作":
                                 st.error(err)
                             elif text:
                                 st.text_area(
-                                    "可直接 copy",
+                                    "可直接複製",
                                     value=text, height=320,
                                     key="cl_preview",
                                     label_visibility="collapsed",
                                 )
                     with ab2:
-                        if st.button("🎯 配對 / Gap 分析",
+                        if st.button("🎯 配對／不足分析",
                                      key="ai_btn_gap",
                                      use_container_width=True):
-                            with st.spinner("Gemini 分析中…"):
+                            with st.spinner("智能分析中…"):
                                 obj, err = ai_analyst.analyze_mismatch(
                                     sup_s, uid, cv_kw_s, cv_yr_s, chosen_s,
                                 )
@@ -1752,10 +1752,10 @@ if active == "📌 我的工作":
                             elif obj:
                                 _render_fit_analysis(obj)
         with view_applied:
-            render_job_list(applied_jobs, "_applied", "Applied",
+            render_job_list(applied_jobs, "_applied", "已申請",
                             "尚未有已申請的工作。在 Telegram 點 ✅ Applied 即會記錄至此。")
         with view_hidden:
-            render_job_list(hidden_jobs, "_hidden", "Hidden",
+            render_job_list(hidden_jobs, "_hidden", "已隱藏",
                             "尚未有已隱藏的工作。在 Telegram 點 🚫 Hide 即會記錄至此。")
 
 
