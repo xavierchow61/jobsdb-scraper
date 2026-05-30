@@ -1,0 +1,139 @@
+ALEX WONG
+Senior Backend Engineer / DevOps
+Email: alex.wong@example.com  |  Mobile: +852 9345 6789
+GitHub: github.com/alex-wong-hk  |  LinkedIn: linkedin.com/in/alex-wong-hk
+
+============================================================
+PROFESSIONAL SUMMARY
+============================================================
+
+Backend & infrastructure engineer with 6+ years building scalable
+microservices and CI/CD platforms for fintech and SaaS products
+operating in HK, Singapore, and Australia.
+
+Comfortable across the full stack of a distributed system: Python /
+Go services, Postgres + Redis + Kafka, Kubernetes on AWS / GCP, and
+observability tooling. Strong contributor to engineering culture —
+co-author of two RFCs adopted as company-wide standards. Open-source
+maintainer (1.2k stars on async-rate-limit).
+
+============================================================
+WORK EXPERIENCE
+============================================================
+
+FinChain Asia Limited (Series C fintech, HK + SG)
+Senior Backend Engineer — Payments Platform
+Mar 2022 – Present (2.5 years)
+
+- Lead engineer on the merchant payouts service: 50M+ transactions
+  per month, p99 latency < 80ms, 99.99% availability SLO.
+- Refactored the legacy monolith into 6 Python microservices
+  (FastAPI + asyncpg + Celery), reducing deploy times from 25 min
+  to 3 min and incidents by 65%.
+- Designed event-driven settlement pipeline using Kafka + Debezium
+  CDC + Postgres, replacing a brittle hourly batch job.
+- Co-authored RFC on "Idempotent Async Workflows" — now company
+  standard across 30+ services.
+- Implemented row-level security in Postgres for multi-tenant
+  reporting; passed SOC 2 Type II audit.
+- Mentor 2 junior engineers; review ~15 PRs / week.
+
+LightSwitch Cloud Pty Ltd (SaaS DevOps platform, AU + HK)
+DevOps Engineer
+Jul 2019 – Feb 2022 (2.5 years)
+
+- Built and maintained CI/CD pipelines on GitLab + ArgoCD for 80+
+  internal services, with automated security scanning (Snyk, Trivy)
+  and policy enforcement (OPA Gatekeeper).
+- Migrated multi-region Kubernetes clusters from self-managed kops
+  to EKS (AWS) and GKE (GCP), saving 30% on compute spend.
+- Implemented Prometheus + Grafana + Loki + Tempo observability
+  stack and on-call paging (PagerDuty), cutting MTTR from 45 min
+  to 12 min.
+- Authored Terraform modules and Helm charts adopted as the
+  organisation's golden path.
+
+GreenStart Studio (early-stage IoT startup, HK)
+Full-stack Engineer
+Aug 2018 – Jun 2019 (11 months)
+
+- Built MVP web dashboard (Django + React) and IoT device firmware
+  in C++ for ESP32-based sensors.
+- Set up the first AWS infrastructure: VPC, ECS Fargate, RDS,
+  CloudFront — supported 5,000 active devices on launch day.
+
+============================================================
+EDUCATION
+============================================================
+
+The Hong Kong University of Science and Technology (HKUST)
+BSc Computer Science with Honours  |  2014 – 2018  |  GPA 3.7 / 4.3
+- Final-year project: Distributed key-value store with Raft consensus
+  (graded First Class)
+- Dean's List 2016, 2017, 2018
+
+============================================================
+TECHNICAL SKILLS
+============================================================
+
+- Languages: Python (expert, 6y), Go (3y), TypeScript / Node.js (3y),
+  Bash, SQL; working knowledge of Rust + Java
+- Web frameworks: FastAPI, Flask, Django, Gin, Express, NestJS
+- Databases: PostgreSQL (incl. replication, partitioning, pgvector,
+  RLS), MySQL, Redis, MongoDB, DynamoDB, ClickHouse, Snowflake
+- Async / streaming: Celery, RQ, Kafka, RabbitMQ, NATS, Debezium CDC
+- Cloud & Infra: AWS (EKS, ECS, RDS, S3, Lambda, IAM, VPC, CloudFront),
+  GCP (GKE, Cloud Run, BigQuery, Pub/Sub), Terraform, Pulumi, Helm,
+  ArgoCD, Crossplane
+- Containers / Orchestration: Docker, Kubernetes (CKA certified),
+  Istio service mesh, kustomize
+- CI/CD: GitLab CI, GitHub Actions, Jenkins, Buildkite, CircleCI
+- Observability: Prometheus, Grafana, Loki, Tempo, OpenTelemetry,
+  Sentry, Datadog, ELK stack
+- Security: OWASP Top 10, OAuth 2.0 / OIDC, JWT, mTLS, OPA, Snyk,
+  basic threat modelling
+- Methodology: TDD, trunk-based development, agile (Scrum + Kanban),
+  pair programming, blameless postmortems, RFC-driven design
+
+============================================================
+CERTIFICATIONS
+============================================================
+
+- AWS Certified Solutions Architect — Professional (2023)
+- Certified Kubernetes Administrator (CKA, 2022, renewed 2024)
+- HashiCorp Terraform Associate (2022)
+- Google Cloud Professional Cloud Architect (2024)
+
+============================================================
+OPEN SOURCE / SIDE PROJECTS
+============================================================
+
+- async-rate-limit: Python library for distributed token-bucket rate
+  limiting using Redis. 1.2k GitHub stars; used by 6 companies.
+- hk-tax-calc: Open-source HK salaries tax + MPF calculator (Python
+  CLI + web UI). 350 stars.
+- Maintainer of fastapi-otel-instrumentation contrib package.
+- Regular speaker at HK Python User Group and PyCon HK 2023.
+
+============================================================
+LANGUAGES
+============================================================
+
+- Cantonese (native)
+- English (fluent — IELTS 8.0; written and spoken professional)
+- Mandarin / Putonghua (working proficiency)
+
+============================================================
+KEYWORDS (for ATS / search)
+============================================================
+
+software engineer, backend engineer, senior engineer, staff engineer,
+DevOps, SRE, platform engineer, cloud engineer, full stack, fintech,
+SaaS, Python, FastAPI, Django, Flask, Go, Golang, Node.js, TypeScript,
+microservices, REST API, GraphQL, gRPC, event-driven, Kafka, RabbitMQ,
+Postgres, PostgreSQL, MySQL, Redis, MongoDB, DynamoDB, ClickHouse,
+Snowflake, BigQuery, Docker, Kubernetes, k8s, EKS, GKE, AWS, GCP,
+Terraform, Pulumi, Helm, ArgoCD, GitHub Actions, GitLab CI,
+Prometheus, Grafana, Loki, OpenTelemetry, Sentry, Datadog, OAuth,
+JWT, mTLS, SOC 2, agile, scrum, TDD, code review, HKUST, AWS SA
+Pro, CKA

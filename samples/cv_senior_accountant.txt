@@ -1,0 +1,117 @@
+CATHY CHAN
+Senior Accountant
+Email: cathy.chan@example.com  |  Mobile: +852 9123 4567
+LinkedIn: linkedin.com/in/cathy-chan-hk
+
+============================================================
+PROFESSIONAL SUMMARY
+============================================================
+
+HKICPA-qualified accounting professional with 7+ years of progressive
+experience in financial reporting, group consolidation, and external
+audit. Proven track record in full set of accounts, monthly and yearly
+close, IFRS / HKFRS compliance, and managing a team of 3 junior
+accountants at a Hong Kong listed company.
+
+Strong background in IPO readiness, transfer pricing documentation,
+and ERP migrations. Big 4 audit foundation (KPMG) before moving in-house.
+
+============================================================
+WORK EXPERIENCE
+============================================================
+
+ABC Group Holdings Limited (HKEX: 1234)
+Senior Accountant — Group Reporting
+Apr 2021 – Present (3 years)
+
+- Lead the monthly consolidation of 15 subsidiaries across Hong Kong,
+  Mainland China, and Southeast Asia, closing within working day 5.
+- Prepare and review IFRS 15 / 16 / 9 / 17 compliance schedules and
+  disclosures for annual and interim reports of the listed group.
+- Liaise with external auditors (Big 4) on group audit; manage
+  responses on impairment testing, deferred tax, revenue cut-off,
+  and going-concern review.
+- Implemented intercompany reconciliation procedures, reducing aged
+  recon items by 60% over 12 months.
+- Manage transfer pricing documentation for Hong Kong and China
+  entities, supporting OECD BEPS Pillar 2 reporting obligations.
+- Supervise 3 junior accountants on AP / AR / GL workstreams.
+- Owner of the SOX-equivalent internal controls matrix for finance.
+
+XYZ Consulting Limited (subsidiary of US-listed parent)
+Accountant — Finance & Operations
+Aug 2017 – Mar 2021 (3 years 8 months)
+
+- Owned the full set of accounts for the Hong Kong entity, including
+  GL, AP, AR, bank reconciliation, fixed asset register, and tax
+  filings (Profits Tax / Employer's Return IR56B).
+- Prepared monthly management reports for the regional CFO covering
+  P&L, cash flow, budget variance, and KPI dashboards.
+- Filed annual PRH return; liaised with IRD on tax queries.
+- Migrated accounting system from SAP Business One to Oracle NetSuite,
+  leading user acceptance testing and training for 8 finance team
+  members.
+- Supported statutory audit, achieving unqualified opinion 4 years
+  in a row.
+
+KPMG Hong Kong
+Audit Associate / Senior Associate
+Aug 2017 – Aug 2017 (intern → 1 year FT before XYZ move) [intern only]
+
+- Performed audit fieldwork on listed and private clients in
+  consumer retail and real estate sectors.
+
+============================================================
+EDUCATION & QUALIFICATIONS
+============================================================
+
+The Chinese University of Hong Kong (CUHK)
+Bachelor of Business Administration in Professional Accountancy
+Sep 2013 – Jul 2017  |  GPA: 3.6 / 4.0  |  First Class Honours
+
+Hong Kong Institute of Certified Public Accountants
+HKICPA Member (full qualification, 2020)
+
+ACCA — Affiliate (member 2019)
+
+============================================================
+TECHNICAL SKILLS
+============================================================
+
+- Accounting Systems: SAP, Oracle NetSuite, Xero, MYOB, Sage,
+  QuickBooks
+- Reporting Standards: HKFRS, IFRS, US GAAP (working knowledge)
+- ERP & BI: SAP BPC, Oracle Hyperion, Power BI, Tableau
+- Office: Microsoft Excel (advanced — pivot tables, VLOOKUP, INDEX/
+  MATCH, Power Query, VBA macros), Word, PowerPoint, Google Workspace
+- Languages: Cantonese (native), English (professional, IELTS 7.5),
+  Mandarin / Putonghua (fluent, PSC 二級乙等)
+
+============================================================
+KEY PROJECTS & ACHIEVEMENTS
+============================================================
+
+- Led IPO readiness assessment for ABC Group Holdings prior to its
+  2022 Main Board listing — drafted Accountants' Report and
+  prospectus accounting policies in collaboration with the reporting
+  accountants.
+- Implemented automated month-end close workflows in NetSuite,
+  reducing close cycle from 8 working days to 5.
+- Mentored 2 junior accountants who became HKICPA-qualified within
+  3 years of joining.
+- Speaker at HKICPA Young Members CPD session 2023: "IFRS 16 in
+  practice — common pitfalls".
+
+============================================================
+KEYWORDS (for ATS / search)
+============================================================
+
+HKICPA, ACCA, CPA, full set of accounts, general ledger, GL, AP, AR,
+bank reconciliation, fixed assets, month-end close, year-end close,
+group consolidation, IFRS, HKFRS, US GAAP, Big 4, KPMG, audit,
+financial reporting, management reporting, P&L, cash flow,
+budgeting, forecasting, variance analysis, profits tax, employer's
+return, IR56B, transfer pricing, BEPS, SAP, Oracle NetSuite,
+Xero, Hyperion, Power BI, Excel, Listed company, HKEX, IPO,
+prospectus, real estate, fund, MPF, taxation, compliance, internal
+control, SOX
