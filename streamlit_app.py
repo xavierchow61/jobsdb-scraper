@@ -1160,6 +1160,35 @@ if active == "📊 結果 & 日誌":
                     all_rows = list(_csv.DictReader(fh))
                 total_scraped = len(all_rows)
 
+                # Merge cached Gemini fit_score into each row so the table
+                # can show both keyword Match and AI Fit side-by-side.
+                ai_fit_by_jd = {}
+                sup_user = auth.get_supabase()
+                user_now = auth.get_user()
+                if sup_user and user_now and all_rows and ai_analyst is not None:
+                    jd_nums = [
+                        r.get("JD Number") for r in all_rows
+                        if r.get("JD Number")
+                    ]
+                    if jd_nums:
+                        try:
+                            ai_res = (
+                                sup_user.table("job_analysis")
+                                .select("jd_number, mismatch_analysis")
+                                .eq("user_id", user_now["id"])
+                                .in_("jd_number", jd_nums)
+                                .execute()
+                            )
+                            for ar in (ai_res.data or []):
+                                ma = ar.get("mismatch_analysis") or {}
+                                if ma.get("fit_score") is not None:
+                                    ai_fit_by_jd[ar["jd_number"]] = ma["fit_score"]
+                        except Exception:
+                            pass
+                for r in all_rows:
+                    fit_val = ai_fit_by_jd.get(r.get("JD Number"))
+                    r["AI Fit"] = int(fit_val) if fit_val is not None else None
+
                 # Filter logic
                 threshold = float(st.session_state.get("s_match_threshold", 0) or 0)
                 # Default: hide Match=0 (no keyword overlap) rows. User can
@@ -1196,18 +1225,21 @@ if active == "📊 結果 & 日誌":
                         "請使用下方的 **🎯 配對分析** 取得 Gemini AI 的 fit 分數（理解 context）。"
                     )
 
-                    # Display key columns only (otherwise too wide)
+                    # Display key columns only (otherwise too wide).
+                    # Show AI Fit only if at least one row has it cached.
+                    cols_order = [
+                        "AI Fit", "Match Score", "Match Keywords",
+                        "Job Title", "Company",
+                        "Salary", "Location", "Posted Date",
+                        "Work Type", "URL",
+                    ]
+                    has_ai = any(r.get("AI Fit") is not None for r in rows)
                     display_cols = [
-                        c for c in (
-                            "Match Score", "Match Keywords",
-                            "Job Title", "Company",
-                            "Salary", "Location", "Posted Date",
-                            "Work Type", "URL",
-                        )
-                        if c in rows[0]
+                        c for c in cols_order
+                        if c in rows[0] and (c != "AI Fit" or has_ai)
                     ]
                     table_data = [
-                        {k: r.get(k, "") for k in display_cols}
+                        {k: r.get(k) for k in display_cols}
                         for r in rows
                     ]
                     st.dataframe(
@@ -1218,14 +1250,51 @@ if active == "📊 結果 & 日誌":
                             "URL": st.column_config.LinkColumn(
                                 "URL", width="small", display_text="🔗",
                             ),
+                            "AI Fit": st.column_config.NumberColumn(
+                                "AI Fit", format="%d", width="small",
+                                help="Gemini AI 配對分數（已快取的工作）",
+                            ),
                             "Match Score": st.column_config.NumberColumn(
                                 "Match", format="%d", width="small",
+                                help="Keyword overlap 分數（CV vocab ∩ JD 文字）",
                             ),
                             "Match Keywords": st.column_config.TextColumn(
                                 "已配對的 keyword", width="medium",
                             ),
                         },
                     )
+
+                    # Batch AI 分析 button — fills cache for uncached rows
+                    if ai_analyst is not None and ai_analyst.is_available():
+                        uncached = [
+                            r for r in rows
+                            if r.get("JD Number")
+                            and not ai_fit_by_jd.get(r.get("JD Number"))
+                        ]
+                        if uncached:
+                            cv_kw_b = ss.get("cv_keywords") or []
+                            cv_yr_b = ss.get("cv_years")
+                            if st.button(
+                                f"🤖 為其餘 {len(uncached)} 條工作運行 Gemini 配對",
+                                key="ai_batch_run",
+                            ):
+                                prog = st.progress(0)
+                                stat = st.empty()
+                                for i, r in enumerate(uncached):
+                                    stat.caption(
+                                        f"分析中… {i + 1}/{len(uncached)}："
+                                        f"{(r.get('Job Title') or '')[:50]}"
+                                    )
+                                    try:
+                                        ai_analyst.analyze_mismatch(
+                                            sup_user, user_now["id"],
+                                            cv_kw_b, cv_yr_b, r,
+                                        )
+                                    except Exception as e:
+                                        print(f"batch ai failed: {e}")
+                                    prog.progress((i + 1) / len(uncached))
+                                stat.caption("完成 — 重新整理表格")
+                                st.rerun()
                 else:
                     if total_scraped == 0:
                         st.info("今次無新工作。")
