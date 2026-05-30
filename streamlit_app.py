@@ -287,14 +287,23 @@ def _auto_ai_analyze(args, csv_path):
     if not sup:
         return
 
-    try:
-        cv_kw = list(st.session_state.get("cv_keywords") or [])
-        cv_yr = st.session_state.get("cv_years")
-    except Exception:
-        cv_kw, cv_yr = [], None
+    # Pull CV state from args (snapshot taken on the main thread before
+    # the worker started). Falls back to session_state if missing, but
+    # that path is unreliable from inside a worker thread.
+    cv_kw = list(getattr(args, "cv_keywords", None) or [])
+    cv_yr = getattr(args, "cv_years", None)
+    if not cv_kw:
+        try:
+            cv_kw = list(st.session_state.get("cv_keywords") or [])
+            cv_yr = cv_yr or st.session_state.get("cv_years")
+        except Exception:
+            pass
 
     if not cv_kw:
-        print("  [ai] 無 CV keywords，跳過 AI 分析")
+        print(
+            "  [ai] 未偵測到 CV keywords — 請先去 Tab 📄 CV 上傳 CV，"
+            "然後再 scrape，AI 配對分析會自動運行。"
+        )
         return
 
     import csv as _csv
@@ -1280,6 +1289,14 @@ if active == "🔍 搜尋 & 開始":
         _u = auth.get_user()
         args.user_id = _u["id"] if _u else None
 
+        # Snapshot CV state from session_state HERE (main thread context).
+        # Reading st.session_state from inside the worker thread is
+        # unreliable — without add_script_run_ctx, it raises and the
+        # try/except in _auto_ai_analyze used to silently fall back to
+        # an empty list → Gemini got skipped entirely.
+        args.cv_keywords = list(ss.get("cv_keywords") or [])
+        args.cv_years = ss.get("cv_years")
+
         persist_cv_keywords()
 
         ss.log_lines = []
@@ -1623,9 +1640,25 @@ if active == "📊 結果 & 日誌":
                             "可調低 Tab 🎯 比對分數 的下限，或勾選下方選項查看全部。"
                         )
                     else:
+                        # Diagnose WHY everything is 0 so user gets a clear
+                        # next step instead of vague "Gemini 未配置".
+                        if not ss.get("cv_keywords"):
+                            reason = (
+                                "原因：尚未上傳 CV，所以 AI 配對分析未能執行。"
+                                "請先去 Tab 📄 CV 上傳 CV，然後再重新 scrape。"
+                            )
+                        elif ai_analyst is None or not ai_analyst.is_available():
+                            why = (ai_analyst.availability_reason()
+                                   if ai_analyst else "ai_analyst 模組未載入")
+                            reason = f"原因：Gemini 未啟用 — {why}"
+                        else:
+                            reason = (
+                                "原因：AI 分析可能仍在背景運行，或本次所有工作分數"
+                                "確實偏低。可勾選下方選項查看全部。"
+                            )
                         st.info(
-                            f"今次抓到 {total_scraped} 條，但全部評分為 0（Gemini 未配置或分析未完成）。"
-                            "勾選下方選項查看全部，或至 Tab 📄 CV 確認關鍵字已抽取。"
+                            f"今次抓到 {total_scraped} 條，但全部評分為 0。\n\n"
+                            f"{reason}"
                         )
 
                 # Downloads row — CSV + Excel
