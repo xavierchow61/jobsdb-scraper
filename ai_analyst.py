@@ -214,7 +214,12 @@ def analyze_mismatch(supabase, user_id, cv_keywords, cv_years, job_row, force=Fa
             return cached["mismatch_analysis"], None
 
     kw_str = ", ".join(cv_keywords[:30]) if cv_keywords else "(未提供 keyword)"
-    prompt = f"""你係招聘配對顧問。比較以下用戶 CV 同職位 JD，輸出純 JSON object（不要 markdown fence、不要其他文字）。
+    prompt = f"""你係資深招聘配對顧問。比較以下用戶 CV 同職位 JD，給出明確嘅申請建議。
+
+主要任務：解釋**為何建議申請**呢個 job（如分數低就誠實講為何不建議）。
+側重 actionable reasoning，俾用戶清楚決定是否花時間 apply。
+
+只輸出純 JSON object（無 markdown fence、無其他文字）。
 
 【職位】{meta['title']} @ {meta['company']}
 
@@ -228,14 +233,25 @@ def analyze_mismatch(supabase, user_id, cv_keywords, cv_years, job_row, force=Fa
 經驗：{cv_years or '?'} 年
 關鍵字：{kw_str}
 
-請輸出以下 JSON schema（用繁體中文書面語）：
+請輸出以下 JSON schema（**所有文字用繁體中文書面語**）：
+
 {{
-  "matched_skills":   ["..."],   // CV 同 JD 都有嘅關鍵字，最多 8 個
-  "missing_skills":   ["..."],   // JD 有但 CV 無嘅關鍵 skill，最多 5 個
-  "mismatch_reason":  "...",     // 一句總結為何 user 可能配對唔強（≤ 50 字）
-  "strength_summary": "...",     // 一句總結 user 喺呢個 job 嘅優勢（≤ 50 字）
-  "fit_score":        0          // 0-100 整數，根據經驗 + skill match
-}}"""
+  "fit_score": 0,              // 0-100 整數
+  "verdict": "...",            // 一個：建議申請 / 可考慮 / 不太建議
+  "why_apply": [               // 為何建議申請，3-5 點具體理由
+    "理由 1（具體指出 user 哪 1-2 個經驗／技能直接對應 JD 哪項要求，配以細節）",
+    "..."
+  ],
+  "talking_points": "...",     // 1-2 句：申請時 cover letter / 面試應該突出嘅角度
+  "matched_skills": ["..."],   // CV 同 JD 都有嘅關鍵字 / 技能，最多 8 個
+  "missing_skills": ["..."],   // JD 有但 CV 似乎冇嘅關鍵 skill，最多 5 個
+  "concerns": "..."            // 一句：申請時要留意嘅地方／可能嘅 mismatch（≤ 60 字）
+}}
+
+如果 user 真係唔啱呢份工：
+- verdict = "不太建議"
+- why_apply 仍要列 1-2 個「邊度啱」嘅角度（即使分低），俾 user 可以選擇仍然 apply 嗰陣有點頭緒
+- concerns 詳述主要 gap"""
 
     text, err = _call_llm(prompt, max_chars=2000)
     if err:

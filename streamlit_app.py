@@ -292,6 +292,96 @@ def run_scrape(args, q, stop_event, result):
         q.put(("__DONE__", False))
 
 
+def _render_fit_analysis(obj):
+    """Display Gemini's fit analysis with positive reasoning emphasis.
+
+    Expected dict shape (returned by ai_analyst.analyze_mismatch):
+      fit_score, verdict, why_apply (list), talking_points,
+      matched_skills (list), missing_skills (list), concerns
+
+    Also handles legacy field names (strength_summary, mismatch_reason)
+    so cached older analyses still render gracefully.
+    """
+    fit = obj.get("fit_score") or 0
+    verdict = (obj.get("verdict") or "").strip()
+    color = (
+        theme.PALETTE["success"] if fit >= 70
+        else theme.PALETTE["warning"] if fit >= 40
+        else theme.PALETTE["red"]
+    )
+    verdict_emoji = {
+        "建議申請": "✅",
+        "可考慮":   "🤔",
+        "不太建議": "⚠",
+    }.get(verdict, "🎯")
+
+    # Top row: score + verdict
+    st.markdown(
+        f"""<div style='display:flex;align-items:center;gap:18px;
+        background:white;border:2px solid {color};border-radius:14px;
+        padding:14px 18px;margin:8px 0;'>
+          <div style='font-size:2.2rem;font-weight:800;color:{color};
+          line-height:1;'>{fit}<span style='font-size:0.9rem;font-weight:500;
+          color:{theme.PALETTE["muted"]};'> / 100</span></div>
+          <div style='font-size:1.05rem;font-weight:700;color:{color};'>
+          {verdict_emoji} {verdict or 'AI 評估'}</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    # Main reasoning — 為何建議申請
+    why = obj.get("why_apply") or []
+    # Backwards-compat: old cache used strength_summary single string
+    if not why and obj.get("strength_summary"):
+        why = [obj["strength_summary"]]
+    if why:
+        st.markdown(
+            f"<div style='font-weight:700;font-size:0.95rem;"
+            f"color:{theme.PALETTE['accent_dark']};margin:14px 0 6px;'>"
+            f"💡 為何建議申請</div>",
+            unsafe_allow_html=True,
+        )
+        for r in why:
+            st.markdown(
+                f"<div style='padding:8px 12px;background:{theme.PALETTE['accent_subtle']};"
+                f"border-left:3px solid {theme.PALETTE['accent']};"
+                f"border-radius:6px;margin:4px 0;font-size:0.9rem;'>"
+                f"{r}</div>",
+                unsafe_allow_html=True,
+            )
+
+    # Talking points
+    if obj.get("talking_points"):
+        st.markdown(
+            f"<div style='margin:14px 0 6px;padding:10px 14px;"
+            f"background:{theme.PALETTE['success_subtle']};border-radius:8px;"
+            f"font-size:0.88rem;'>"
+            f"🎤 <b>申請時可強調：</b> {obj['talking_points']}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    # Skills chips
+    matched = obj.get("matched_skills") or []
+    missing = obj.get("missing_skills") or []
+    if matched or missing:
+        sk1, sk2 = st.columns(2)
+        with sk1:
+            if matched:
+                st.caption("✅ 配對到嘅 skill")
+                st.write(", ".join(matched))
+        with sk2:
+            if missing:
+                st.caption("❌ JD 有但 CV 無")
+                st.write(", ".join(missing))
+
+    # Concerns (collapsed by default — secondary info)
+    concerns = obj.get("concerns") or obj.get("mismatch_reason")
+    if concerns:
+        with st.expander("⚠ 申請時要留意"):
+            st.write(concerns)
+
+
 def persist_cv_keywords():
     """Save edited keywords as .profile.json next to the CV so cv_match
     reads our edits instead of auto-extracting on each scrape."""
@@ -1206,27 +1296,7 @@ if active == "📊 結果 & 日誌":
                                 if err:
                                     st.error(err)
                                 elif obj:
-                                    fit = obj.get("fit_score") or 0
-                                    color = (
-                                        theme.PALETTE["success"] if fit >= 70
-                                        else theme.PALETTE["warning"] if fit >= 40
-                                        else theme.PALETTE["red"]
-                                    )
-                                    st.markdown(
-                                        f"<div style='font-size:1.6rem;font-weight:800;"
-                                        f"color:{color};'>{fit} / 100</div>",
-                                        unsafe_allow_html=True,
-                                    )
-                                    if obj.get("strength_summary"):
-                                        st.success(f"💪 {obj['strength_summary']}")
-                                    if obj.get("mismatch_reason"):
-                                        st.warning(f"⚠ {obj['mismatch_reason']}")
-                                    if obj.get("matched_skills"):
-                                        st.caption("✅ 配對到嘅 skill：")
-                                        st.write(", ".join(obj["matched_skills"]))
-                                    if obj.get("missing_skills"):
-                                        st.caption("❌ JD 有但 CV 無：")
-                                        st.write(", ".join(obj["missing_skills"]))
+                                    _render_fit_analysis(obj)
             except Exception as e:
                 st.warning(f"讀取輸出檔失敗: {e}")
 
@@ -1451,25 +1521,7 @@ if active == "📌 我的工作":
                             if err:
                                 st.error(err)
                             elif obj:
-                                fit = obj.get("fit_score") or 0
-                                color = (
-                                    theme.PALETTE["success"] if fit >= 70
-                                    else theme.PALETTE["warning"] if fit >= 40
-                                    else theme.PALETTE["red"]
-                                )
-                                st.markdown(
-                                    f"<div style='font-size:1.4rem;font-weight:800;"
-                                    f"color:{color};'>Fit: {fit} / 100</div>",
-                                    unsafe_allow_html=True,
-                                )
-                                if obj.get("missing_skills"):
-                                    st.warning(
-                                        "❌ 需補強：" + ", ".join(obj["missing_skills"])
-                                    )
-                                if obj.get("matched_skills"):
-                                    st.success(
-                                        "✅ 已配對：" + ", ".join(obj["matched_skills"])
-                                    )
+                                _render_fit_analysis(obj)
         with view_applied:
             render_job_list(applied_jobs, "_applied", "Applied",
                             "尚未有已申請的工作。喺 Telegram 點 ✅ Applied 就會記錄到呢度。")
