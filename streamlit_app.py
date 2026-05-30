@@ -368,6 +368,43 @@ def _effective_score(row, ai_fit_by_jd):
         return 0.0
 
 
+def _toggle_job_action(supabase, user_id, jd_number, column):
+    """Toggle saved/applied/hidden status for one (user, jd).
+    Sets the column to current UTC time if currently NULL, clears
+    (sets to NULL) if currently set. Returns the new value or None on
+    failure.
+    """
+    from datetime import datetime, timezone
+    if (not supabase or not user_id or not jd_number
+            or column not in ("saved", "applied", "hidden")):
+        return None
+    try:
+        res = (
+            supabase.table("job_actions")
+            .select(column)
+            .eq("user_id", str(user_id))
+            .eq("jd_number", str(jd_number))
+            .limit(1)
+            .execute()
+        )
+        current = res.data[0].get(column) if res.data else None
+    except Exception:
+        current = None
+    now_iso = datetime.now(timezone.utc).isoformat()
+    new_val = None if current else now_iso
+    try:
+        supabase.table("job_actions").upsert({
+            "user_id": str(user_id),
+            "jd_number": str(jd_number),
+            column: new_val,
+            "updated_at": now_iso,
+        }).execute()
+        return new_val
+    except Exception as e:
+        print(f"  toggle_job_action failed: {e}")
+        return None
+
+
 def run_scrape(args, q, stop_event, result):
     old_stdout = sys.stdout
     sys.stdout = StreamPipe(q)
@@ -1280,17 +1317,18 @@ if active == "📊 結果 & 日誌":
                     all_rows = list(_csv.DictReader(fh))
                 total_scraped = len(all_rows)
 
-                # Merge cached Gemini fit_score into each row so the table
-                # can show both keyword Match and AI Fit side-by-side.
+                # Merge cached Gemini fit_score + saved/applied/hidden
+                # status into each row so cards can render them.
                 ai_fit_by_jd = {}
+                actions_by_jd = {}
                 sup_user = auth.get_supabase()
                 user_now = auth.get_user()
-                if sup_user and user_now and all_rows and ai_analyst is not None:
+                if sup_user and user_now and all_rows:
                     jd_nums = [
                         r.get("JD Number") for r in all_rows
                         if r.get("JD Number")
                     ]
-                    if jd_nums:
+                    if jd_nums and ai_analyst is not None:
                         try:
                             ai_res = (
                                 sup_user.table("job_analysis")
@@ -1305,9 +1343,27 @@ if active == "📊 結果 & 日誌":
                                     ai_fit_by_jd[ar["jd_number"]] = ma["fit_score"]
                         except Exception:
                             pass
+                    if jd_nums:
+                        try:
+                            ja_res = (
+                                sup_user.table("job_actions")
+                                .select("jd_number, saved, applied, hidden")
+                                .eq("user_id", user_now["id"])
+                                .in_("jd_number", jd_nums)
+                                .execute()
+                            )
+                            actions_by_jd = {
+                                a["jd_number"]: a for a in (ja_res.data or [])
+                            }
+                        except Exception:
+                            pass
                 for r in all_rows:
                     fit_val = ai_fit_by_jd.get(r.get("JD Number"))
                     r["AI Fit"] = int(fit_val) if fit_val is not None else None
+                    act = actions_by_jd.get(r.get("JD Number"), {})
+                    r["_saved"] = bool(act.get("saved"))
+                    r["_applied"] = bool(act.get("applied"))
+                    r["_hidden"] = bool(act.get("hidden"))
 
                 # Filter logic — prefer AI Fit (Gemini) over keyword Match.
                 # AI Fit reflects context-aware reasoning; keyword Match is
@@ -1423,9 +1479,22 @@ if active == "📊 結果 & 日誌":
                                         unsafe_allow_html=True,
                                     )
 
-                            # Action buttons
+                            # Status badges (if any action is set)
+                            badges = []
+                            if r.get("_saved"):   badges.append("⭐ 已儲存")
+                            if r.get("_applied"): badges.append("✅ 已申請")
+                            if r.get("_hidden"):  badges.append("🚫 已隱藏")
+                            if badges:
+                                st.markdown(
+                                    f"<div style='font-size:0.78rem;color:"
+                                    f"{theme.PALETTE['accent_dark']};"
+                                    f"margin:6px 0 2px;'>{' · '.join(badges)}</div>",
+                                    unsafe_allow_html=True,
+                                )
+
+                            # Action buttons — AI (2) + status toggles (3)
                             if ai_ok:
-                                bc1, bc2, _ = st.columns([1.2, 1.2, 4])
+                                bc1, bc2 = st.columns(2)
                                 if bc1.button("📋 職位摘要",
                                               key=f"btn_sum_{safe_jd}",
                                               use_container_width=True):
@@ -1438,6 +1507,24 @@ if active == "📊 結果 & 日誌":
                                     st.session_state[key_fit] = (
                                         not st.session_state.get(key_fit, False)
                                     )
+
+                            # Save / Apply / Hide toggles
+                            sa1, sa2, sa3 = st.columns(3)
+                            sv_label = "↩ 取消儲存" if r.get("_saved") else "⭐ 儲存"
+                            ap_label = "↩ 取消申請" if r.get("_applied") else "✅ 已申請"
+                            hd_label = "↩ 取消隱藏" if r.get("_hidden") else "🚫 隱藏"
+                            if sa1.button(sv_label, key=f"sv_{safe_jd}",
+                                          use_container_width=True):
+                                _toggle_job_action(sup_user, uid_now, jd, "saved")
+                                st.rerun()
+                            if sa2.button(ap_label, key=f"ap_{safe_jd}",
+                                          use_container_width=True):
+                                _toggle_job_action(sup_user, uid_now, jd, "applied")
+                                st.rerun()
+                            if sa3.button(hd_label, key=f"hd_{safe_jd}",
+                                          use_container_width=True):
+                                _toggle_job_action(sup_user, uid_now, jd, "hidden")
+                                st.rerun()
 
                                 # Inline expansions
                                 if st.session_state.get(key_sum):
