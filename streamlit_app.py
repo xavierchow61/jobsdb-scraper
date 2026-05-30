@@ -1588,7 +1588,9 @@ if active == "📊 結果 & 日誌":
                                 _toggle_job_action(sup_user, uid_now, jd, "hidden")
                                 st.rerun()
 
-                                # Inline expansions
+                            # Inline expansions — only when AI is available
+                            # and the user toggled the corresponding button.
+                            if ai_ok:
                                 if st.session_state.get(key_sum):
                                     with st.spinner("智能摘要中…"):
                                         text, err = ai_analyst.summarize_jd(
