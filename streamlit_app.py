@@ -879,6 +879,50 @@ if active == "📄 上傳 CV":
                 st.session_state.pop(k, None)
             st.rerun()
 
+    # Built-in sample CVs — for testing without uploading your real CV.
+    # Selecting one copies the .txt to a tempfile, sets uploaded_cv_path,
+    # and triggers the same keyword-extraction flow as a real upload.
+    SAMPLE_CVS = [
+        ("會計／審計（Senior Accountant, 7 年）",
+         "samples/cv_senior_accountant.txt"),
+        ("數碼營銷（Marketing Manager, 5 年）",
+         "samples/cv_marketing_manager.txt"),
+        ("軟件工程（Backend / DevOps, 6 年）",
+         "samples/cv_software_engineer.txt"),
+    ]
+    with st.expander("📦 或者載入內置模擬 CV（用於測試）", expanded=False):
+        st.caption(
+            "三份不同行業嘅虛構 CV，揀完按下「載入」即會自動抽取關鍵字，"
+            "效果同自己上傳一樣。原本上傳嘅 CV 會被覆蓋。"
+        )
+        sample_labels = [name for name, _ in SAMPLE_CVS]
+        pick = st.selectbox(
+            "揀一份模擬 CV",
+            sample_labels,
+            key="sample_cv_pick",
+        )
+        if st.button("📥 載入此 CV", key="sample_cv_load"):
+            pick_path = dict(SAMPLE_CVS)[pick]
+            src = Path(__file__).parent / pick_path
+            if not src.exists():
+                st.error(f"找不到檔案：{pick_path}")
+            else:
+                # Copy to a tempfile so the existing extraction flow picks
+                # it up via uploaded_cv_path (avoids special-casing).
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+                tmp.write(src.read_bytes())
+                tmp.close()
+                st.session_state.uploaded_cv_path = tmp.name
+                st.session_state.uploaded_cv_name = src.name
+                st.session_state.pop("cv_keywords_for", None)
+                # Bump the keyword textarea version so any prior edit
+                # gets discarded along with the previous CV's keywords.
+                st.session_state.cv_kw_ver = (
+                    st.session_state.get("cv_kw_ver", 0) + 1
+                )
+                st.success(f"✓ 已載入：{src.name}")
+                st.rerun()
+
     if not appcfg.IS_CLOUD:
         st.text_input(
             "或填入本地 CV 路徑",
