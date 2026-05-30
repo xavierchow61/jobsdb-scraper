@@ -1157,21 +1157,39 @@ if active == "📊 結果 & 日誌":
             try:
                 import csv as _csv
                 with open(p, encoding="utf-8-sig", newline="") as fh:
-                    rows = list(_csv.DictReader(fh))
-                # Apply match threshold filter — only show jobs that passed
+                    all_rows = list(_csv.DictReader(fh))
+                total_scraped = len(all_rows)
+
+                # Filter logic
                 threshold = float(st.session_state.get("s_match_threshold", 0) or 0)
+                # Default: hide Match=0 (no keyword overlap) rows. User can
+                # opt-in via the toggle to see them.
+                show_zero = st.checkbox(
+                    "顯示 Match=0 嘅工作（JD 同 CV 完全冇 keyword overlap）",
+                    value=False, key="show_zero_match",
+                )
+                rows = all_rows
+                # Threshold filter (only if user set > 0)
                 if threshold > 0:
                     rows = [
                         r for r in rows
                         if float(r.get("Match Score") or 0) >= threshold
                     ]
+                # Always hide pure-zero unless user opted in
+                if not show_zero:
+                    rows = [
+                        r for r in rows
+                        if float(r.get("Match Score") or 0) > 0
+                    ]
+                hidden_count = total_scraped - len(rows)
 
                 if rows:
-                    # Show summary chip + table
-                    st.caption(
-                        f"今次抓到 **{len(rows)}** 條工作"
-                        + (f"（match score ≥ {threshold:.0f}）" if threshold else "")
-                    )
+                    parts = [f"今次抓到 **{total_scraped}** 條"]
+                    if threshold > 0:
+                        parts.append(f"≥ {threshold:.0f} 分顯示 **{len(rows)}** 條")
+                    elif hidden_count:
+                        parts.append(f"已隱藏 Match=0 **{hidden_count}** 條（剩 **{len(rows)}**）")
+                    st.caption("，".join(parts))
                     st.caption(
                         "ℹ Match 係 keyword-based（CV 詞 vs JD 詞）— "
                         "0 = JD 用嘅字眼同你 CV vocab 冇 overlap。"
@@ -1209,23 +1227,36 @@ if active == "📊 結果 & 日誌":
                         },
                     )
                 else:
-                    st.info("無工作通過 match score 下限。")
+                    if total_scraped == 0:
+                        st.info("今次冇新工作。")
+                    elif threshold > 0:
+                        st.info(
+                            f"今次抓到 {total_scraped} 條，但全部 Match Score 都 < {threshold:.0f}。"
+                            "可以調低 Tab 🎯 比對分數 嘅下限，或者剔「顯示 Match=0」見全部。"
+                        )
+                    else:
+                        st.info(
+                            f"今次抓到 {total_scraped} 條，但全部 Match=0（CV 同 JD 冇 keyword overlap）。"
+                            "剔「顯示 Match=0」見全部，或者上 Tab 📄 CV 加多啲關鍵字。"
+                        )
 
                 # Downloads row — CSV + Excel
                 csv_data = p.read_bytes()
                 csv_sz_kb = len(csv_data) / 1024
 
-                # Convert to xlsx on-the-fly for the Excel download
+                # Convert to xlsx on-the-fly for the Excel download.
+                # Use all_rows (not filtered) so the download contains every
+                # job scraped — the table filter is for display only.
                 try:
                     import io as _io
                     import openpyxl
                     wb = openpyxl.Workbook()
                     ws = wb.active
                     ws.title = "Jobs"
-                    if rows:
-                        headers = list(rows[0].keys())
+                    if all_rows:
+                        headers = list(all_rows[0].keys())
                         ws.append(headers)
-                        for r in rows:
+                        for r in all_rows:
                             ws.append([r.get(h, "") for h in headers])
                     buf = _io.BytesIO()
                     wb.save(buf)
