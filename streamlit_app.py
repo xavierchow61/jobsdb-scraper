@@ -368,6 +368,37 @@ def _effective_score(row, ai_fit_by_jd):
         return 0.0
 
 
+def _save_match_threshold():
+    """Persist current s_match_threshold to Supabase user_settings."""
+    if not auth.is_logged_in():
+        return
+    try:
+        val = float(st.session_state.get("s_match_threshold", 0) or 0)
+        auth.save_user_settings(match_threshold=val)
+    except Exception as e:
+        print(f"[user-prefs] save threshold failed: {e}")
+
+
+def _on_tab2_threshold_change():
+    """Tab 2 number_input changed → mirror to Tab 5 slider + save."""
+    try:
+        val = float(st.session_state.get("s_match_threshold", 0) or 0)
+        st.session_state.tab5_score_filter = val
+    except Exception:
+        pass
+    _save_match_threshold()
+
+
+def _on_tab5_filter_change():
+    """Tab 5 slider changed → mirror to Tab 2 number_input + save."""
+    try:
+        val = float(st.session_state.get("tab5_score_filter", 0) or 0)
+        st.session_state.s_match_threshold = val
+    except Exception:
+        pass
+    _save_match_threshold()
+
+
 def _toggle_job_action(supabase, user_id, jd_number, column):
     """Toggle saved/applied/hidden status for one (user, jd).
     Sets the column to current UTC time if currently NULL, clears
@@ -701,6 +732,19 @@ init_runtime_state()
 ss = st.session_state
 user = auth.get_user()
 
+# Load per-user persisted preferences (match_threshold) from Supabase
+# user_settings — once per session. Logout resets _user_prefs_loaded.
+if user and not ss.get("_user_prefs_loaded"):
+    try:
+        _settings = auth.get_user_settings()
+        if _settings and _settings.get("match_threshold") is not None:
+            _mt = float(_settings["match_threshold"])
+            ss.s_match_threshold = _mt
+            ss.tab5_score_filter = _mt
+    except Exception as _e:
+        print(f"[user-prefs] load failed: {_e}")
+    ss._user_prefs_loaded = True
+
 # Header with user info + logout
 hc1, hc2 = st.columns([5, 1])
 with hc1:
@@ -926,7 +970,9 @@ if active == "🎯 比對分數":
         "下限（0 = 全部推送）",
         min_value=0.0, max_value=100.0, step=5.0,
         key="s_match_threshold",
-        help="只有匹配分數 ≥ 此值的工作才會推送至 Telegram。主資料庫仍會記錄全部結果。",
+        on_change=_on_tab2_threshold_change,
+        help="只有匹配分數 ≥ 此值的工作才會推送至 Telegram。"
+             "此設定會自動儲存至你的帳戶，下次登入無需重新輸入。",
     )
 
     # Visual guide
@@ -1368,11 +1414,27 @@ if active == "📊 結果 & 日誌":
                 # Filter logic — prefer AI Fit (Gemini) over keyword Match.
                 # AI Fit reflects context-aware reasoning; keyword Match is
                 # the legacy narrow vocab score.
-                threshold = float(st.session_state.get("s_match_threshold", 0) or 0)
-                show_zero = st.checkbox(
-                    "顯示無分數的工作（AI 未分析或分析失敗）",
-                    value=False, key="show_zero_match",
-                )
+                # In-page filter slider — synced with Tab 2 setting and
+                # persisted to user_settings via on_change callback.
+                if "tab5_score_filter" not in st.session_state:
+                    st.session_state.tab5_score_filter = float(
+                        st.session_state.get("s_match_threshold", 0) or 0
+                    )
+                fc1, fc2 = st.columns([3, 2])
+                with fc1:
+                    st.slider(
+                        "🎯 最低分數（同時更新「比對分數」設定）",
+                        min_value=0, max_value=100, step=5,
+                        key="tab5_score_filter",
+                        on_change=_on_tab5_filter_change,
+                    )
+                with fc2:
+                    show_zero = st.checkbox(
+                        "顯示無分數的工作",
+                        value=False, key="show_zero_match",
+                        help="包括 AI 未分析或分析失敗的工作",
+                    )
+                threshold = float(st.session_state.tab5_score_filter)
 
                 def _row_score(r):
                     """AI Fit (if cached) ─ else keyword Match Score."""

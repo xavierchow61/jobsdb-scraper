@@ -184,6 +184,8 @@ def logout():
     st.session_state.user = None
     st.session_state.session = None
     st.session_state._session_attached = False
+    # Reset user-pref loader so next login re-fetches from user_settings
+    st.session_state._user_prefs_loaded = False
 
 
 def reset_password(email):
